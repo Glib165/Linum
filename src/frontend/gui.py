@@ -30,6 +30,7 @@ from config.config import (
     SIZES,
     STYLES,
     REASONING,
+    DEFAULT_REASONING,
 )
 from src.backend.services.chat_store import ChatStore
 from src.backend.services.settings_store import SettingsStore
@@ -200,7 +201,7 @@ class LinumApp(ctk.CTk):
             "plus", "search", "gallery", "folder", "sidebar", "settings", "trash",
         )}
         self.small_icons = {name: make_icon(name, 15, theme.MUTED) for name in (
-            "refresh", "copy", "open", "folder", "palette", "frame", "model",
+            "refresh", "copy", "open", "folder", "palette", "frame", "model", "bulb",
         )}
         self.menu_icons = {name: make_icon(name, 16, theme.TEXT) for name in (
             "settings", "palette", "folder", "model",
@@ -626,6 +627,14 @@ class LinumApp(ctk.CTk):
         )
         self.size_menu.set(self.settings.get("size") if self.settings.get("size") in SIZES else "Квадрат 1:1")
         self.size_menu.pack(side="left")
+
+        # Рівень міркувань Gaia: можна міняти перед кожним повідомленням
+        ctk.CTkLabel(tools, image=self.small_icons["bulb"], text="").pack(side="left", padx=(10, 0))
+        self.reasoning_menu = ctk.CTkOptionMenu(
+            tools, values=list(REASONING.keys()), command=self.set_reasoning, **self.menu_style()
+        )
+        self.reasoning_menu.set(self.settings.get("reasoning") if self.settings.get("reasoning") in REASONING else DEFAULT_REASONING)
+        self.reasoning_menu.pack(side="left")
 
         self.send_button = ctk.CTkButton(
             tools,
@@ -1378,7 +1387,7 @@ class LinumApp(ctk.CTk):
         self.generating = busy and generating
         state = "disabled" if busy else "normal"
         self.send_button.configure(state="normal" if not busy and self.pipe is not None else "disabled")
-        for widget in (self.model_menu, self.style_menu, self.size_menu):
+        for widget in (self.model_menu, self.style_menu, self.size_menu, self.reasoning_menu):
             widget.configure(state=state)
         # Переходити між екранами не можна лише під час створення картинки
         navigation = "disabled" if self.generating else "normal"
@@ -1399,6 +1408,13 @@ class LinumApp(ctk.CTk):
             self.clear_attachment()
 
     # ---------- Мозок ----------
+
+    def set_reasoning(self, value):
+        # Зміна рівня з поля вводу або з налаштувань: запам'ятовуємо і показуємо однаково в обох місцях
+        self.settings.set("reasoning", value)
+        self.reasoning_menu.set(value)
+        # У нового рівня може бути інша модель: перевіряємо, чи вона є, і завантажуємо її
+        self._check_brain()
 
     def reasoning(self):
         # Налаштування вибраного рівня міркувань: {"model", "think", "check"}
@@ -2125,11 +2141,6 @@ class LinumApp(ctk.CTk):
     def _settings_generation(self, content):
         self._settings_title(content, "Генерація")
 
-        def reasoning_changed(value):
-            self.settings.set("reasoning", value)
-            # У нового рівня може бути інша модель: перевіряємо, чи вона є, і завантажуємо її
-            self._check_brain()
-
         row = self._setting_row(
             content,
             "Рівень міркувань",
@@ -2137,7 +2148,7 @@ class LinumApp(ctk.CTk):
             "Середній і Ультра перевіряють готову картинку",
         )
         selector = ctk.CTkSegmentedButton(
-            row, values=list(REASONING.keys()), command=reasoning_changed, **self.segmented_style()
+            row, values=list(REASONING.keys()), command=self.set_reasoning, **self.segmented_style()
         )
         selector.set(self.settings.get("reasoning"))
         selector.grid(row=0, column=1, sticky="e")

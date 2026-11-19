@@ -83,6 +83,14 @@ def _model(d):
     d.line((48, 50, 48, 88), fill=255, width=STROKE)
 
 
+def _bulb(d):
+    # Лампочка: рівень міркувань
+    d.arc((22, 8, 74, 60), start=135, end=405, fill=255, width=STROKE)
+    d.line((31, 52, 36, 66, 60, 66, 65, 52), fill=255, width=STROKE, joint="curve")
+    d.line((38, 77, 58, 77), fill=255, width=STROKE)
+    d.line((42, 88, 54, 88), fill=255, width=STROKE)
+
+
 def _close(d):
     d.line((22, 22, 74, 74), fill=255, width=STROKE + 2)
     d.line((74, 22, 22, 74), fill=255, width=STROKE + 2)
@@ -103,6 +111,7 @@ DRAWERS = {
     "palette": _palette,
     "frame": _frame,
     "model": _model,
+    "bulb": _bulb,
 }
 
 
