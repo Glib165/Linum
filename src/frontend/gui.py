@@ -203,6 +203,7 @@ class LinumApp(ctk.CTk):
         self.small_icons = {name: make_icon(name, 15, theme.MUTED) for name in (
             "refresh", "copy", "open", "folder", "palette", "frame", "model", "bulb",
         )}
+        self.dots_icon = make_icon("dots", 16, theme.TEXT)
         self.menu_icons = {name: make_icon(name, 16, theme.TEXT) for name in (
             "settings", "palette", "folder", "model",
         )}
@@ -443,9 +444,11 @@ class LinumApp(ctk.CTk):
         self.search_entry.bind("<KeyRelease>", lambda event: self.render_chat_list())
         self.search_entry.bind("<Escape>", lambda event: self.toggle_search())
 
-        ctk.CTkLabel(
+        # Заголовок над списком: "Закріплені", якщо є закріплені чати, інакше "Нещодавні"
+        self.list_title = ctk.CTkLabel(
             self.sidebar, text="Нещодавні", font=self.font(12), text_color=theme.MUTED, anchor="w"
-        ).grid(row=3, column=0, sticky="ew", padx=18, pady=(18, 4))
+        )
+        self.list_title.grid(row=3, column=0, sticky="ew", padx=18, pady=(18, 4))
 
         self.chat_list = ctk.CTkScrollableFrame(
             self.sidebar,
@@ -808,6 +811,9 @@ class LinumApp(ctk.CTk):
         self.chat_buttons = []
         query = self.search_entry.get().strip().lower() if self.search_entry.winfo_ismapped() else ""
 
+        has_pinned = any(chat.get("pinned") and chat["messages"] for chat in self.chats.chats)
+        self.list_title.configure(text="Закріплені" if has_pinned else "Нещодавні")
+        section = "pinned" if has_pinned else "recent"
         for chat in self.chats.sorted_chats():
             if not chat["messages"]:
                 continue
@@ -817,10 +823,14 @@ class LinumApp(ctk.CTk):
                 for message in chat["messages"]
             ):
                 continue
+            # Заголовки розділів, якщо є закріплені чати
+            if not chat.get("pinned") and section == "pinned":
+                section = "recent"
+                self._chat_section("Нещодавні")
             selected = chat["id"] == self.current_chat_id and self.view == "chat"
             button = ctk.CTkButton(
                 self.chat_list,
-                text=shorten(chat["title"], 30),
+                text=shorten(chat["title"], 26),
                 anchor="w",
                 height=34,
                 corner_radius=8,
@@ -833,6 +843,7 @@ class LinumApp(ctk.CTk):
             button.pack(fill="x", pady=1)
             button.bind("<Button-3>", lambda event, chat_id=chat["id"]: self._chat_menu(event, chat_id))
             button.chat_id = chat["id"]
+            self._add_chat_dots(button)
             self.chat_buttons.append(button)
 
         if not self.chat_buttons:
@@ -846,27 +857,138 @@ class LinumApp(ctk.CTk):
     def highlight_chat(self):
         # Лише перемикає підсвічування в списку чатів, без повної перебудови списку
         for button in self.chat_buttons:
-            selected = button.chat_id == self.current_chat_id and self.view == "chat"
-            color = theme.SELECTED if selected else "transparent"
-            if button.cget("fg_color") != color:
-                button.configure(fg_color=color)
+            self._update_chat_dots(button)
 
-    def _chat_menu(self, event, chat_id):
-        # Меню правої кнопки миші на чаті
+    def _chat_section(self, title):
+        ctk.CTkLabel(
+            self.chat_list, text=title, font=self.font(12), text_color=theme.MUTED, anchor="w"
+        ).pack(fill="x", padx=10, pady=(8, 2))
+
+    def _add_chat_dots(self, button):
+        # Кнопка "три крапки" поверх правого краю чату. Видно при наведенні і у відкритого чату.
+        dots = ctk.CTkButton(
+            self.chat_list,
+            text="",
+            image=self.dots_icon,
+            width=26,
+            height=26,
+            corner_radius=6,
+            fg_color=theme.SURFACE_HOVER,
+            hover_color=theme.BORDER,
+            text_color=theme.TEXT,
+            command=lambda: self._chat_menu(None, button.chat_id, dots),
+        )
+        button.dots = dots
+        button.hovered = False
+
+        def entered(event):
+            button.hovered = True
+            self._update_chat_dots(button)
+
+        def left(event):
+            # Курсор міг просто перейти з чату на крапки: перевіряємо трохи згодом, де він насправді
+            def check():
+                if not button.winfo_exists():
+                    return
+                x, y = self.winfo_pointerxy()
+                under = str(self.winfo_containing(x, y) or "")
+                button.hovered = under.startswith((str(button), str(dots)))
+                self._update_chat_dots(button)
+
+            self.after(30, check)
+
+        for widget in (button, dots):
+            widget.bind("<Enter>", entered, add="+")
+            widget.bind("<Leave>", left, add="+")
+        self._update_chat_dots(button)
+
+    def _update_chat_dots(self, button):
+        dots = getattr(button, "dots", None)
+        if dots is None or not dots.winfo_exists():
+            return
+        selected = button.chat_id == self.current_chat_id and self.view == "chat"
+        # Рядок лишається підсвіченим, навіть коли курсор перейшов з нього на крапки.
+        # Фон крапок такий самий, як у рядка під ними, щоб вони не виглядали латкою.
+        if button.hovered:
+            color = theme.SURFACE_HOVER
+        else:
+            color = theme.SELECTED if selected else "transparent"
+        if button.cget("fg_color") != color:
+            button.configure(fg_color=color)
+        if button.hovered or selected:
+            dots.configure(fg_color=color)
+            dots.place(in_=button, relx=1.0, x=-4, rely=0.5, anchor="e")
+            dots.lift()
+        else:
+            dots.place_forget()
+
+    def _chat_menu(self, event, chat_id, anchor=None):
+        # Меню чату: з трьох крапок (anchor) або з правої кнопки миші (event)
         if self.generating:
+            return
+        chat = self.chats.get(chat_id)
+        if chat is None:
             return
         menu = tk.Menu(
             self, tearoff=0, bd=0, relief="flat", font=(theme.FONT_FAMILY, 10),
             bg=themed(theme.SURFACE), fg=themed(theme.TEXT),
             activebackground=themed(theme.SURFACE_HOVER), activeforeground=themed(theme.TEXT),
         )
-        menu.add_command(label="Відкрити", command=lambda: self.open_chat(chat_id))
+        pinned = bool(chat.get("pinned"))
+        menu.add_command(label="  Відкріпити" if pinned else "  Закріпити",
+                         command=lambda: self.pin_chat(chat_id, not pinned))
+        menu.add_command(label="  Перейменувати", command=lambda: self.rename_chat(chat_id))
         menu.add_separator()
-        menu.add_command(label="Видалити чат", command=lambda: self.delete_chat(chat_id))
+        menu.add_command(label="  Видалити", command=lambda: self.delete_chat(chat_id),
+                         foreground=themed(theme.DANGER), activeforeground=themed(theme.DANGER))
+        if anchor is not None and anchor.winfo_ismapped():
+            # Під трьома крапками
+            x, y = anchor.winfo_rootx(), anchor.winfo_rooty() + anchor.winfo_height() + 2
+        elif event is not None:
+            x, y = event.x_root, event.y_root
+        else:
+            x, y = self.winfo_pointerxy()
         try:
-            menu.tk_popup(event.x_root, event.y_root)
+            menu.tk_popup(x, y)
         finally:
             menu.grab_release()
+
+    def pin_chat(self, chat_id, pinned):
+        self.chats.set_pinned(chat_id, pinned)
+        self.render_chat_list()
+
+    def rename_chat(self, chat_id):
+        # Назва чату на місці стає полем вводу: Enter зберігає, Esc скасовує
+        button = next((b for b in self.chat_buttons if b.chat_id == chat_id), None)
+        chat = self.chats.get(chat_id)
+        if button is None or chat is None:
+            return
+        button.dots.place_forget()
+        entry = ctk.CTkEntry(
+            self.chat_list, height=34, corner_radius=8, border_width=1, border_color=theme.ACCENT,
+            fg_color=theme.SURFACE, text_color=theme.TEXT, font=self.font(13),
+        )
+        entry.insert(0, chat["title"])
+        entry.place(in_=button, relx=0, rely=0, relwidth=1, relheight=1)
+        entry.focus_set()
+        entry.select_range(0, "end")
+        done = False
+
+        def finish(save):
+            nonlocal done
+            if done:
+                return
+            done = True
+            if save:
+                self.chats.rename(chat_id, entry.get())
+                if chat_id == self.current_chat_id and self.view == "chat":
+                    self.header_title.configure(text=shorten(self.chats.get(chat_id)["title"], 70))
+            entry.destroy()
+            self.render_chat_list()
+
+        entry.bind("<Return>", lambda event: finish(True))
+        entry.bind("<Escape>", lambda event: finish(False))
+        entry.bind("<FocusOut>", lambda event: finish(True))
 
     def open_chat(self, chat_id):
         if self.generating:

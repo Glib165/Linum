@@ -40,7 +40,22 @@ class ChatStore:
         temp_path.replace(self.path)
 
     def sorted_chats(self):
-        return sorted(self.chats, key=lambda chat: chat["updated"], reverse=True)
+        # Закріплені чати завжди вгорі, далі за часом останньої зміни (новіші вище)
+        by_time = sorted(self.chats, key=lambda chat: chat["updated"], reverse=True)
+        return sorted(by_time, key=lambda chat: not chat.get("pinned"))
+
+    def set_pinned(self, chat_id, pinned):
+        chat = self.get(chat_id)
+        if chat is not None:
+            chat["pinned"] = pinned
+            self.save()
+
+    def rename(self, chat_id, title):
+        chat = self.get(chat_id)
+        title = " ".join(title.split())[:60]
+        if chat is not None and title:
+            chat["title"] = title
+            self.save()
 
     def get(self, chat_id):
         for chat in self.chats:

@@ -91,6 +91,12 @@ def _bulb(d):
     d.line((42, 88, 54, 88), fill=255, width=STROKE)
 
 
+def _dots(d):
+    # Три крапки: меню
+    for x in (22, 48, 74):
+        d.ellipse((x - 8, 40, x + 8, 56), fill=255)
+
+
 def _close(d):
     d.line((22, 22, 74, 74), fill=255, width=STROKE + 2)
     d.line((74, 22, 22, 74), fill=255, width=STROKE + 2)
@@ -112,6 +118,7 @@ DRAWERS = {
     "frame": _frame,
     "model": _model,
     "bulb": _bulb,
+    "dots": _dots,
 }
 
 
