@@ -260,14 +260,19 @@ def decide(history, settings=None):
 
     settings: рівень міркувань з REASONING (яка модель і чи думати перед відповіддю).
     """
+    from src.ai import lessons
+
     settings = settings or level(DEFAULT_REASONING)
     release_others(settings["model"])
+    # Уроки з досвіду Gaia читає разом із правилами
+    experience = lessons.as_prompt()
     # Нагадування наприкінці: маленькі моделі інакше часто відповідають мовою правил (українською)
     last = next((m["content"] for m in reversed(history) if m["role"] == "user"), "")
     last = last.split("]\n", 1)[-1][:300]  # без службової примітки про фото
     reminder = {"role": "system", "content": f"Reminder: write \"reply\" in the same language as the user's "
                                              f"last message: \"{last}\". \"prompt\" is always in English."}
-    messages = [{"role": "system", "content": identity() + "\n" + RULES}] + history + [reminder]
+    system = identity() + "\n" + RULES + ("\n" + experience if experience else "")
+    messages = [{"role": "system", "content": system}] + history + [reminder]
     response = chat_with_retry(
         model=settings["model"],
         messages=messages,
@@ -396,6 +401,84 @@ def review(image_path, request, prompt, settings=None):
     better = str(verdict.get("prompt") or "").strip()
     ok = bool(verdict.get("ok")) or not better
     return {"ok": ok, "problem": "" if ok else clean(str(verdict.get("problem") or "")), "prompt": better}
+
+
+LEARN_FORMAT = {
+    "type": "object",
+    "properties": {"lesson": {"type": "string"}},
+    "required": ["lesson"],
+}
+
+LEARN_RULES = """
+Ти вчишся на досвіді. Перед тобою картинка, яку художня модель Stable Diffusion намалювала за твоїм
+описом, і оцінка цієї картинки: від користувача або з твоєї власної перевірки.
+Подивись на картинку, на прохання і на опис, і сформулюй ОДИН загальний урок:
+як наступного разу краще писати опис для художника або який підхід обрати, щоб результат сподобався.
+Урок має бути корисним і для інших схожих прохань, а не лише для цієї картинки.
+Добрі уроки:
+- "Художник не вміє порядок смуг на прапорах: прапор малюй будь-яким, а кольори виправляй перефарбуванням."
+- "Слово bandana художник малює як медичну маску на обличчі; пиши neckerchief."
+- "Для реалістичних облич пиши close-up portrait і natural skin texture."
+Якщо картинка сподобалась, урок про те, що саме спрацювало і варто повторювати.
+Не повторюй уроки, які вже є в списку. Якщо нового загального уроку немає, поверни "".
+Відповідай JSON {"lesson": "..."}: одне речення українською, без емодзі.
+"""
+
+
+def learn(message, liked, settings=None):
+    """Урок з картинки: текст уроку або "" (нічого нового), або None, якщо не вдалося.
+
+    liked: True або False, якщо картинку оцінив користувач;
+           None, якщо проблему знайшла сама Gaia під час перевірки (тоді вчимося на першому, невдалому варіанті).
+    """
+    from src.ai import lessons
+
+    settings = settings or level(DEFAULT_REASONING)
+    release_others(settings["model"])
+    known = lessons.as_prompt() or "Уроків поки немає."
+    image = message["image"]
+    if liked is None:
+        image = message.get("first_image") or image
+        details = [
+            f"Перевіряючи цю картинку, ти знайшла проблему: {message.get('review', '')}",
+            f"Прохання користувача: {message.get('prompt', '')}",
+            f"Опис, за яким художник намалював цю невдалу картинку: {message.get('first_prompt') or message.get('prompt_en', '')}",
+        ]
+        if "fix_worked" in message:
+            # Тренування: виправлений опис уже випробувано, тож урок перевірений на практиці
+            result = "проблему ВИПРАВЛЕНО" if message["fix_worked"] else "проблема ЛИШИЛАСЬ"
+            details.append(f"Потім художник намалював за виправленим описом: {message.get('prompt_en', '')}. "
+                           f"Повторна перевірка: {result}.")
+            if not message["fix_worked"]:
+                details.append("Значить, такий спосіб не допомагає: урок має застерігати від нього "
+                               "або радити інший підхід.")
+    else:
+        verdict = "СПОДОБАЛАСЬ" if liked else "НЕ СПОДОБАЛАСЬ"
+        details = [
+            f"Користувачу картинка {verdict}.",
+            f"Прохання користувача: {message.get('prompt', '')}",
+            f"Опис, за яким малював художник: {message.get('prompt_en', '')}",
+        ]
+        if message.get("review"):
+            details.append(f"Під час перевірки ти помітила: {message['review']} (картинку перемальовано)")
+    if message.get("style") and message["style"] != "Без стилю":
+        details.append(f"Стиль: {message['style']}")
+    try:
+        response = chat_with_retry(
+            model=settings["model"],
+            messages=[
+                {"role": "system", "content": identity() + "\n" + LEARN_RULES + "\n" + known},
+                {"role": "user", "content": "\n".join(details), "images": [Path(image).read_bytes()]},
+            ],
+            format=LEARN_FORMAT,
+            think=settings["think"],
+            keep_alive=KEEP_ALIVE,
+            options={"temperature": 0.3},
+        )
+        text = clean(str(json.loads(response["message"]["content"]).get("lesson") or ""))
+    except Exception:
+        return None
+    return " ".join(text.split())[:300]
 
 
 def clean_targets(targets):

@@ -97,6 +97,13 @@ def _dots(d):
         d.ellipse((x - 8, 40, x + 8, 56), fill=255)
 
 
+def _thumb_up(d):
+    # Палець угору: "подобається". Палець униз малюється так само і перевертається.
+    d.rounded_rectangle((10, 44, 26, 86), radius=4, outline=255, width=STROKE)
+    d.line((36, 46, 50, 14, 58, 12, 64, 20, 60, 40, 80, 40, 86, 50, 78, 84, 36, 84, 36, 46),
+           fill=255, width=STROKE, joint="curve")
+
+
 def _close(d):
     d.line((22, 22, 74, 74), fill=255, width=STROKE + 2)
     d.line((74, 22, 22, 74), fill=255, width=STROKE + 2)
@@ -119,6 +126,8 @@ DRAWERS = {
     "model": _model,
     "bulb": _bulb,
     "dots": _dots,
+    "thumb_up": _thumb_up,
+    "thumb_down": _thumb_up,
 }
 
 
@@ -126,6 +135,8 @@ def make_icon(name, size, colors):
     # colors це пара (колір для світлої теми, колір для темної)
     mask = Image.new("L", (CANVAS, CANVAS), 0)
     DRAWERS[name](ImageDraw.Draw(mask))
+    if name == "thumb_down":
+        mask = mask.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
 
     def painted(color):
         image = Image.new("RGBA", mask.size, color)

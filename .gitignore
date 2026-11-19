@@ -14,6 +14,8 @@ data/datasets/*
 
 # Personal app data: chats and settings
 data/chats.json
+data/lessons.json
+data/lessons.tmp
 data/chats.tmp
 config/settings.json
 config/settings.tmp

@@ -174,6 +174,16 @@ class LinumApp(ctk.CTk):
         self.chat_buttons = []
         # Що показує список чатів: None (усі), ("project", назва) або ("archive",)
         self.list_mode = None
+        # Черга уроків: картинки, з яких Gaia ще має зробити урок (оцінені або з помилкою від Критика)
+        self.lesson_queue = []
+        self.learning = False
+        # Тренування агентів (сторінка "Досвід")
+        self.training = False
+        self.training_stop = False
+        self.training_status = ""
+        self.training_label = None
+        self.training_button = None
+        self.training_recent = []
         self.image_refs = []
         self.thumb_cache = {}
         self.card_cache = {}
@@ -206,6 +216,11 @@ class LinumApp(ctk.CTk):
             "refresh", "copy", "open", "folder", "palette", "frame", "model", "bulb",
         )}
         self.dots_icon = make_icon("dots", 16, theme.TEXT)
+        # Оцінка картинки: сірі іконки, а вибрана оцінка яскравіша
+        self.rating_icons = {
+            (name, active): make_icon(name, 15, theme.TEXT if active else theme.MUTED)
+            for name in ("thumb_up", "thumb_down") for active in (False, True)
+        }
         self.menu_icons = {name: make_icon(name, 16, theme.TEXT) for name in (
             "settings", "palette", "folder", "model",
         )}
@@ -1506,9 +1521,22 @@ class LinumApp(ctk.CTk):
         if message["steps"]:
             details.append(f"{message['steps']} кроків")
         details += [f"{message.get('seconds', 0)} с", datetime.fromisoformat(message["created"]).strftime("%H:%M")]
+        info = ctk.CTkFrame(card, fg_color="transparent")
+        info.pack(fill="x", padx=(14, 8), pady=(2, 0))
         ctk.CTkLabel(
-            card, text="  ·  ".join(details), font=self.font(12), text_color=theme.MUTED, anchor="w"
-        ).pack(fill="x", padx=14, pady=(2, 0))
+            info, text="  ·  ".join(details), font=self.font(12), text_color=theme.MUTED, anchor="w"
+        ).pack(side="left", fill="x", expand=True)
+        if message.get("kind") == "image" and path.exists():
+            # Оцінка: з неї Linum робить урок і вчиться
+            buttons = {}
+            for name, rated in (("thumb_up", 1), ("thumb_down", -1)):
+                buttons[name] = ctk.CTkButton(
+                    info, text="", image=self.rating_icons[(name, message.get("rating") == rated)],
+                    width=28, height=26, corner_radius=8, fg_color="transparent", hover_color=theme.SURFACE_HOVER,
+                )
+            for name, button in buttons.items():
+                button.configure(command=lambda liked=name == "thumb_up": self.rate_image(message, liked, buttons))
+                button.pack(side="left")
 
         actions = ctk.CTkFrame(card, fg_color="transparent")
         actions.pack(fill="x", padx=8, pady=(2, 8))
@@ -1662,6 +1690,121 @@ class LinumApp(ctk.CTk):
         navigation = "disabled" if self.generating else "normal"
         for widget in (self.nav_buttons["new"], self.nav_buttons["gallery"], self.delete_button, *self.chat_buttons):
             widget.configure(state=navigation)
+        if not busy:
+            # Коли Linum вільний, Вчитель обробляє чергу уроків
+            self.after(300, self._run_lessons)
+
+    # ---------- Самонавчання ----------
+
+    def rate_image(self, message, liked, buttons):
+        # Оцінка картинки. Повторне натискання на ту саму оцінку знімає її.
+        value = 1 if liked else -1
+        if message.get("rating") == value:
+            message.pop("rating")
+        else:
+            message["rating"] = value
+            self.queue_lesson(message, liked)
+        self.chats.save()
+        for (name, button), rated in zip(buttons.items(), (1, -1)):
+            button.configure(image=self.rating_icons[(name, message.get("rating") == rated)])
+        self.set_status("Дякую! Linum зробить з цього урок." if message.get("rating") else "Оцінку знято")
+
+    def queue_lesson(self, message, liked):
+        # liked: True/False - оцінка користувача; None - помилку знайшов Критик під час перевірки
+        if not Path(message.get("image", "")).exists():
+            return
+        self.lesson_queue.append((message, liked))
+        self._run_lessons()
+
+    def _run_lessons(self):
+        # Уроки робимо по одному і лише коли Linum нічого не малює: інакше Gaia і художник
+        # не вмістяться у відеопам'ять разом
+        if self.learning or self.busy or not self.brain_ready or not self.lesson_queue:
+            return
+        message, liked = self.lesson_queue.pop(0)
+        self.learning = True
+        settings = self.reasoning()
+
+        def work():
+            lesson = None
+            try:
+                from src.ai import brain, lessons
+
+                free_gpu_memory()
+                text = brain.learn(message, liked, settings)
+                if text and not lessons.is_known(text):
+                    lesson = lessons.add(text, "review" if liked is None else "rating")
+            except Exception:
+                lesson = None
+            self.after(0, self._on_lesson, lesson)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_lesson(self, lesson):
+        self.learning = False
+        if lesson is not None and not self.busy:
+            self.set_status(f"Linum запам'ятав: {shorten(lesson['text'], 140)}")
+        self._run_lessons()
+
+    def toggle_training(self):
+        if self.training:
+            # Зупиняємо між кроками: поточний крок агентів доробиться
+            self.training_stop = True
+            self._set_training_status("Зупиняю після поточного кроку...")
+            return
+        if self.busy or self.pipe is None or not self.brain_ready:
+            self._set_training_status("Зачекайте: художник або мозок ще не готові, чи Linum зараз зайнятий.")
+            return
+        self.training = True
+        self.training_stop = False
+        self._set_busy(True)
+        if self.training_button is not None and self.training_button.winfo_exists():
+            self.training_button.configure(text="Зупинити")
+        pipe, model, settings = self.pipe, self.loaded_model, self.reasoning()
+
+        def log(text):
+            self.after(0, self._set_training_status, text)
+
+        def work():
+            from src.ai import trainer
+
+            rounds = learned = 0
+            while not self.training_stop:
+                try:
+                    result = trainer.run_round(
+                        pipe, model, settings, self.training_recent, log,
+                        stop=lambda: self.training_stop,
+                    )
+                except trainer.Stopped:
+                    break
+                except Exception as error:
+                    log(f"Помилка в раунді: {shorten(str(error), 160)}")
+                    break
+                rounds += 1
+                if result.get("lesson"):
+                    learned += 1
+                    log(f"Раунд {rounds}. Новий урок: {result['lesson']['text']}")
+                elif result.get("request") and not result.get("problem"):
+                    log(f"Раунд {rounds}. Критик не знайшов помилок у завданні: {result['request']}")
+                else:
+                    log(f"Раунд {rounds} без нового уроку.")
+            self.after(0, self._on_training_done, rounds, learned)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _set_training_status(self, text):
+        self.training_status = text
+        self.set_status(shorten(" ".join(text.split()), 150))
+        if self.training_label is not None and self.training_label.winfo_exists():
+            self.training_label.configure(text=text)
+
+    def _on_training_done(self, rounds, learned):
+        self.training = False
+        self._set_busy(False)
+        self._set_training_status(f"Тренування завершено: раундів {rounds}, нових уроків {learned}.")
+        if self.view == "settings":
+            # Оновлюємо сторінку, щоб з'явились нові уроки
+            self.open_settings("experience")
 
     def on_generate(self, event=None):
         prompt = self.prompt_entry.get().strip()
@@ -1893,6 +2036,7 @@ class LinumApp(ctk.CTk):
             nonlocal english, language, steps, box, seed, colors
             review = None
             first_image = None
+            first_prompt = None
             try:
                 from src.ai.generator import edit_image, generate_image, save_image
                 from src.ai.translator import to_english
@@ -1977,6 +2121,7 @@ class LinumApp(ctk.CTk):
                     if verdict is not None and not verdict["ok"]:
                         review = verdict["problem"]
                         first_image = path
+                        first_prompt = english
                         brain.unload()
                         self.after(0, self._set_pending_title, "Перемальовую")
                         english = verdict["prompt"]
@@ -2007,6 +2152,7 @@ class LinumApp(ctk.CTk):
                     # Що Gaia не сподобалось у першому варіанті, і сам перший варіант
                     message["review"] = review
                     message["first_image"] = str(first_image)
+                    message["first_prompt"] = first_prompt
             if source is not None:
                 message["source"] = str(source)
                 message["strength"] = strength
@@ -2050,6 +2196,9 @@ class LinumApp(ctk.CTk):
         self.render_chat_list()
         self.set_status(f"Готово за {message['seconds']} с")
         self.prompt_entry.focus_set()
+        if message.get("review"):
+            # Критик знайшов помилку: Вчитель зробить з неї урок, щоб Автор її більше не повторював
+            self.queue_lesson(message, None)
 
     def _on_generate_failed(self, error):
         self._set_busy(False)
@@ -2276,6 +2425,7 @@ class LinumApp(ctk.CTk):
             ("general", "Загальні"),
             ("appearance", "Вигляд"),
             ("generation", "Генерація"),
+            ("experience", "Досвід"),
             ("storage", "Сховище"),
             ("about", "Про Linum"),
         ):
@@ -2307,7 +2457,9 @@ class LinumApp(ctk.CTk):
         row.grid_columnconfigure(0, weight=1)
         text = ctk.CTkFrame(row, fg_color="transparent")
         text.grid(row=0, column=0, sticky="w")
-        ctk.CTkLabel(text, text=title, font=self.font(14), text_color=theme.TEXT, anchor="w").pack(anchor="w")
+        ctk.CTkLabel(
+            text, text=title, font=self.font(14), text_color=theme.TEXT, anchor="w", justify="left", wraplength=440,
+        ).pack(anchor="w")
         if description:
             ctk.CTkLabel(
                 text, text=description, font=self.font(12), text_color=theme.MUTED,
@@ -2458,6 +2610,53 @@ class LinumApp(ctk.CTk):
 
         steps = ", ".join(f"{name} {info['steps']}" for name, info in MODELS.items())
         self._setting_row(content, "Кроки генерації", f"{steps}. Змінюються у файлі config/config.py")
+
+    def _settings_experience(self, content):
+        # Зошит уроків: чого Linum навчився з власних помилок і ваших оцінок
+        from src.ai import lessons
+
+        self._settings_title(content, "Досвід")
+        ctk.CTkLabel(
+            content,
+            text="Уроки, які Linum зробив зі своїх помилок і ваших оцінок. Gaia читає їх перед кожною картинкою. "
+                 "Якщо урок хибний, видаліть його.",
+            font=self.font(12), text_color=theme.MUTED, anchor="w", justify="left", wraplength=560,
+        ).pack(fill="x", pady=(0, 18))
+
+        # Тренування: агенти самі придумують завдання, малюють, перевіряють і записують уроки
+        row = self._setting_row(
+            content, "Тренування",
+            "Агенти самі придумують завдання, малюють, перевіряють себе і записують уроки. "
+            "Один раунд займає 2-5 хвилин. Поки йде тренування, малювати в чаті не можна.",
+        )
+        self.training_button = self._outline_button(
+            row, "Зупинити" if self.training else "Почати", self.toggle_training,
+        )
+        self.training_label = ctk.CTkLabel(
+            content, text=self.training_status, font=self.font(12), text_color=theme.TEXT,
+            anchor="w", justify="left", wraplength=560,
+        )
+        self.training_label.pack(fill="x", pady=(0, 18))
+
+        items = lessons.load()
+        if not items:
+            ctk.CTkLabel(
+                content, text="Уроків поки немає. Оцініть кілька картинок кнопками під ними.",
+                font=self.font(13), text_color=theme.MUTED, anchor="w",
+            ).pack(fill="x")
+            return
+
+        def forget(lesson_id):
+            lessons.remove(lesson_id)
+            self.open_settings("experience")
+
+        sources = {
+            "training": "Агент-Тренер", "review": "Агент-Критик", "rating": "Ваша оцінка", "developer": "Розробник",
+        }
+        for lesson in reversed(items):
+            when = datetime.fromisoformat(lesson["created"]).strftime("%d.%m %H:%M")
+            row = self._setting_row(content, lesson["text"], f"{sources.get(lesson['source'], '')}  ·  {when}")
+            self._outline_button(row, "Видалити", lambda i=lesson["id"]: forget(i), danger=True)
 
     def _settings_storage(self, content):
         self._settings_title(content, "Сховище")
