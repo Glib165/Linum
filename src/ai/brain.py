@@ -30,7 +30,9 @@ RULES = """
 Ти працюєш усередині програми Linum і можеш сама запускати художню модель.
 Кожну відповідь давай як JSON з полями:
 - "action": одне з "chat", "image", "edit".
-- "reply": коротка відповідь користувачу його мовою.
+- "reply": коротка відповідь користувачу ТІЄЮ САМОЮ мовою, якою написане його останнє повідомлення
+  (китайською відповідай китайською, арабською арабською, англійською англійською і так далі),
+  навіть якщо ці правила написані українською.
 - "prompt": для "image" і "edit" детальний опис зображення АНГЛІЙСЬКОЮ для художньої моделі Stable Diffusion:
   головний предмет, деталі, оточення, освітлення, ракурс; 20-60 слів через кому. Для "chat" порожній рядок.
 - "strength": тільки для "edit": від 0.3 (трохи підправити) до 0.75 (сильно змінити). Для інших 0.
@@ -153,7 +155,25 @@ def is_available(model=LLM_MODEL):
 
 def warm_up(model=LLM_MODEL):
     # Завантажує модель у пам'ять заздалегідь, щоб перша відповідь не чекала
+    release_others(model)
     ollama.generate(model=model, prompt="", keep_alive=KEEP_ALIVE)
+
+
+def release_others(model, wait=15):
+    # Прибирає з пам'яті інші мовні моделі (наприклад, після зміни рівня міркувань).
+    # Дві моделі разом у відеопам'ять не влазять, і тоді Ollama падає з "out of memory".
+    try:
+        others = [item.model for item in ollama.ps().models
+                  if item.model not in (model, f"{model}:latest")]
+        for name in others:
+            ollama.generate(model=name, prompt="", keep_alive=0)
+        deadline = time.time() + wait
+        while others and time.time() < deadline and any(
+            item.model in others for item in ollama.ps().models
+        ):
+            time.sleep(0.3)
+    except Exception:
+        pass
 
 
 def unload(wait=15):
@@ -241,7 +261,13 @@ def decide(history, settings=None):
     settings: рівень міркувань з REASONING (яка модель і чи думати перед відповіддю).
     """
     settings = settings or level(DEFAULT_REASONING)
-    messages = [{"role": "system", "content": identity() + "\n" + RULES}] + history
+    release_others(settings["model"])
+    # Нагадування наприкінці: маленькі моделі інакше часто відповідають мовою правил (українською)
+    last = next((m["content"] for m in reversed(history) if m["role"] == "user"), "")
+    last = last.split("]\n", 1)[-1][:300]  # без службової примітки про фото
+    reminder = {"role": "system", "content": f"Reminder: write \"reply\" in the same language as the user's "
+                                             f"last message: \"{last}\". \"prompt\" is always in English."}
+    messages = [{"role": "system", "content": identity() + "\n" + RULES}] + history + [reminder]
     response = chat_with_retry(
         model=settings["model"],
         messages=messages,
@@ -347,6 +373,7 @@ REVIEW_RULES = """
 def review(image_path, request, prompt, settings=None):
     """Gaia дивиться на готову картинку. Повертає {"ok", "problem", "prompt"} або None, якщо не вдалося."""
     settings = settings or level(DEFAULT_REASONING)
+    release_others(settings["model"])
     try:
         response = chat_with_retry(
             model=settings["model"],
