@@ -1567,6 +1567,7 @@ class LinumApp(ctk.CTk):
             remove=bool(message.get("remove")),
             colors=message.get("colors"),
             box=tuple(message["box"]) if message.get("box") else None,
+            vary=True,
         )
 
     # ---------- Моделі ----------
@@ -1842,7 +1843,7 @@ class LinumApp(ctk.CTk):
 
     def start_generation(self, prompt, english=None, language=None, style=None, size=None,
                          show_bubble=True, kind=None, source=None, strength=None, unload_brain=False,
-                         targets=None, where="", remove=False, colors=None, box=None):
+                         targets=None, where="", remove=False, colors=None, box=None, vary=False):
         # source: шлях до фото, яке треба змінити. Без нього малюється нове зображення.
         # targets: англійські назви предмета, який треба знайти на фото і змінити лише його.
         # remove: прибрати цей предмет (місце заливається фоном і домальовується).
@@ -1889,7 +1890,7 @@ class LinumApp(ctk.CTk):
             self.after(0, self._update_progress, step, total)
 
         def work():
-            nonlocal english, language, steps, box, seed
+            nonlocal english, language, steps, box, seed, colors
             review = None
             first_image = None
             try:
@@ -1951,12 +1952,16 @@ class LinumApp(ctk.CTk):
                 recolored = bool(colors) and source is not None and (mask is not None or not targets)
                 if recolored:
                     # Лише колір: міняємо його точно по пікселях, художник не потрібен
-                    from src.ai.recolor import recolor
+                    from src.ai.recolor import recolor, vary_color
 
+                    if vary:
+                        # "Ще варіант": кожен новий колір трохи інший відтінок (залежить від seed)
+                        colors = [{**change, "to": vary_color(change["to"], seed + index)}
+                                  for index, change in enumerate(colors)]
                     self.after(0, self._set_pending_title, "Перефарбовую")
                     with Image.open(source) as original:
                         whole = Image.new("L", original.size, 255)
-                        path = save_image(recolor(original, mask if mask is not None else whole, colors))
+                        path = save_image(recolor(original, mask if mask is not None else whole, colors, exact=vary))
                     steps = 0
                 else:
                     path, steps = draw(full_prompt, seed)

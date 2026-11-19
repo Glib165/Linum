@@ -13,6 +13,8 @@
 
 import numpy as np
 from PIL import Image, ImageFilter
+import colorsys
+import random
 
 # Наскільки піксель може відрізнятися від усіх "старих" кольорів, щоб його все одно змінити.
 # Далекі пікселі (наприклад, біла нитка на чорно-червоному прапорі) лишаються як були.
@@ -52,6 +54,24 @@ def hex_to_lab(color):
     return rgb_to_lab(rgb)
 
 
+def vary_color(color, seed):
+    """Повертає трохи інший відтінок кольору color ("#RRGGBB"). Той самий seed дає той самий результат."""
+    # 1. Розібрати "#C62828" на три числа від 0 до 1: червоний, зелений, синій
+    r = int(color[1:3], 16) / 255
+    g = int(color[3:5], 16) / 255
+    b = int(color[5:7], 16) / 255
+    # 2. Перевести їх у HSV: відтінок, насиченість, яскравість
+    h, s, v = colorsys.rgb_to_hsv(r, g, b)
+    # 3. Трохи зсунути кожне з трьох випадковим числом
+    chance = random.Random(seed)
+    h = (h + chance.uniform(-0.04, 0.04)) % 1.0
+    s = min(1.0, max(0.0, s + chance.uniform(-0.12, 0.12)))
+    v = min(1.0, max(0.0, v + chance.uniform(-0.12, 0.12)))
+    # 4. Перевести назад у RGB і зібрати рядок "#RRGGBB"
+    r, g, b = colorsys.hsv_to_rgb(h, s, v)
+    return f"#{round(r * 255):02X}{round(g * 255):02X}{round(b * 255):02X}"
+
+
 def features(lab):
     # Ознаки, за якими пікселі ділимо на кольори. Головне тут відтінок відносно яскравості:
     # складка червоної тканини в тіні темна, але все одно "червона", а не чорна.
@@ -77,11 +97,13 @@ def shift(pixels, mean, new_mean, light_ratio):
     return np.concatenate([light, tint], axis=1)
 
 
-def recolor(image, mask, changes, even=False):
+def recolor(image, mask, changes, even=False, exact=False):
     """Перефарбовує предмет під маскою.
 
     even=True: зробити всю маску рівно кольором "to" (для recolor_parts): змінюються всі пікселі,
     а "старі" кольори беруться точно такими, як передані, без уточнення по фото.
+    exact=True: новий колір саме "to", навіть якщо схожий колір уже є на фото
+    (для "Ще варіант", щоб кожен відтінок було видно).
 
     changes: список {"from": "#RRGGBB" або "", "to": "#RRGGBB"}.
     "from" порожній означає "весь предмет у колір to".
@@ -131,7 +153,7 @@ def recolor(image, mask, changes, even=False):
         # (Серед кандидатів і сама група: якщо колір уже потрібний, вона лишається як є)
         match = min(range(len(centers)), key=lambda i: distances(target[None], centers[i:i + 1])[0, 0])
         other = pixels[(nearest == match) & close] if match is not None else pixels[:0]
-        if not even and len(other) and distances(target[None], centers[match:match + 1])[0, 0] < 20:
+        if not even and not exact and len(other) and distances(target[None], centers[match:match + 1])[0, 0] < 20:
             new_mean = other.mean(0)
             light_ratio = np.clip(max(other[:, 0].std(), 2) / spread, 0.5, 2)
         else:
