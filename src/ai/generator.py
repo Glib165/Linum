@@ -93,10 +93,63 @@ def working_size(width, height, longest=768):
     return new_width, new_height
 
 
+_edit_pipes = {}
+
+
+def edit_pipeline(pipe):
+    # Та сама модель, але в режимі "домалювати частину фото". Частини моделі спільні
+    # зі звичайним режимом, тож додаткової пам'яті він не займає.
+    # Важливо ввімкнути для нього перенос на процесор: інакше після редагування
+    # частини моделі лишаються на відеокарті, пам'ять переповнюється, і все працює в рази повільніше.
+    key = id(pipe)
+    if key not in _edit_pipes:
+        _edit_pipes.clear()
+        edit_pipe = StableDiffusionInpaintPipeline(**pipe.components)
+        edit_pipe.set_progress_bar_config(disable=True)
+        edit_pipe.enable_model_cpu_offload()
+        _edit_pipes[key] = edit_pipe
+    return _edit_pipes[key]
+
+
+def fill_from_surroundings(image, mask):
+    """Заливає виділене місце кольорами навколо нього.
+
+    Потрібно, щоб прибрати предмет: звичайна модель погано вигадує фон "з нуля",
+    але добре доробляє розмиту пляму потрібного кольору до справжнього фону.
+    Як це працює: зменшуємо фото без виділеної частини в 4, 8, 16... разів.
+    На маленькій копії кольори фону "розтікаються" на місце предмета,
+    і кожна точка виділення бере колір з найдрібнішої копії, де його вже видно.
+    """
+    import numpy as np
+
+    selected = (np.asarray(mask.convert("L")) > 127).astype(np.float32)
+    keep = 1.0 - selected
+    pixels = np.asarray(image.convert("RGB")).astype(np.float32)
+    width, height = image.size
+
+    def shrink(array, factor):
+        small = Image.fromarray(array.astype(np.float32), "F").resize(
+            (max(1, width // factor), max(1, height // factor)), Image.BOX
+        )
+        return np.asarray(small.resize((width, height), Image.BILINEAR))
+
+    result = pixels.copy()
+    done = np.zeros_like(selected)
+    for factor in (4, 8, 16, 32, 64, 128):
+        weight = shrink(keep, factor)
+        colors = np.stack([shrink(pixels[..., channel] * keep, factor) for channel in range(3)], -1)
+        ready = (weight > 0.05) & (selected > 0) & (done == 0)
+        result[ready] = colors[ready] / weight[ready][:, None]
+        done[ready] = 1
+    filled = Image.fromarray(np.clip(result, 0, 255).astype(np.uint8))
+    # Легке розмиття прибирає "сходинки" від зменшених копій
+    return Image.composite(filled.filter(ImageFilter.GaussianBlur(6)), image.convert("RGB"), mask.convert("L"))
+
+
 def edit_image(pipe, image_path, prompt, mask=None, strength=0.6,
-               model_name=DEFAULT_MODEL, on_step=None, negative_prompt=None, seed=None):
-    # Та сама модель, але в режимі "домалювати частину фото"
-    edit_pipe = StableDiffusionInpaintPipeline(**pipe.components)
+               model_name=DEFAULT_MODEL, on_step=None, negative_prompt=None, seed=None, fill=False):
+    """Змінює фото. mask: біле = перемалювати. fill=True: спершу залити виділене фоном (щоб прибрати предмет)."""
+    edit_pipe = edit_pipeline(pipe)
 
     # Відкриваємо фото і зменшуємо до розміру, з яким може працювати модель
     original = Image.open(image_path).convert("RGB")
@@ -109,6 +162,9 @@ def edit_image(pipe, image_path, prompt, mask=None, strength=0.6,
     else:
         work_mask = mask.convert("L").resize((width, height))
         work_mask = work_mask.filter(ImageFilter.MaxFilter(15))
+
+    # Модель бачить фото з уже залитим фоном місцем, а поза маскою все одно залишиться оригінал
+    model_input = fill_from_surroundings(source, work_mask) if fill and mask is not None else source
 
     # Скільки кроків реально буде зроблено
     steps = MODELS[model_name]["steps"]
@@ -125,7 +181,7 @@ def edit_image(pipe, image_path, prompt, mask=None, strength=0.6,
 
     result = edit_pipe(
         prompt,
-        image=source,
+        image=model_input,
         mask_image=work_mask,
         negative_prompt=negative_prompt,
         width=width,

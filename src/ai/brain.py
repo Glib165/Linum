@@ -34,6 +34,17 @@ RULES = """
 - "prompt": для "image" і "edit" детальний опис зображення АНГЛІЙСЬКОЮ для художньої моделі Stable Diffusion:
   головний предмет, деталі, оточення, освітлення, ракурс; 20-60 слів через кому. Для "chat" порожній рядок.
 - "strength": тільки для "edit": від 0.3 (трохи підправити) до 0.75 (сильно змінити). Для інших 0.
+- "targets": тільки для "edit", коли зміна стосується конкретного предмета на фото (прибрати його,
+  перефарбувати, замінити, змінити): 2-3 варіанти короткої англійської назви цього предмета, 1-2 слова кожен.
+  Називай те, що реально ВИДНО на зображенні, а не слова користувача. Якщо користувач каже
+  "ота штука внизу" або "літаюча штука", подивись на фото і назви, що це: ["helmet", "robot head", "metal object"].
+  Якщо користувач просить перефарбувати чи змінити головний об'єкт (наприклад "зроби робота червоним"),
+  це теж предмет: ["robot", "metal robot"].
+  Порожній список лише тоді, коли змінюється все фото цілком: стиль, пора року, освітлення, час доби.
+- "where": де на фото цей предмет: "top", "bottom", "left", "right", "center", "top-left", "top-right",
+  "bottom-left", "bottom-right". Подивись на зображення. Якщо предмет займає майже все фото або "targets" порожній, "".
+- "remove": true, якщо цей предмет треба прибрати. Тоді "prompt" описує, що має бути на його місці
+  (фон, підлога, небо), наприклад "empty grey studio floor, soft shadow". Інакше false.
 
 Як обирати action:
 - "image": користувач просить намалювати, створити, згенерувати, показати нове зображення.
@@ -63,6 +74,8 @@ def clean(text):
     lines = [re.sub(r"[ \t]{2,}", " ", line).strip() for line in EMOJI.sub("", text).split("\n")]
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
 
+WHERE = ["top", "bottom", "left", "right", "center", "top-left", "top-right", "bottom-left", "bottom-right"]
+
 DECISION_FORMAT = {
     "type": "object",
     "properties": {
@@ -70,8 +83,11 @@ DECISION_FORMAT = {
         "reply": {"type": "string"},
         "prompt": {"type": "string"},
         "strength": {"type": "number"},
+        "targets": {"type": "array", "items": {"type": "string"}},
+        "where": {"type": "string", "enum": ["", *WHERE]},
+        "remove": {"type": "boolean"},
     },
-    "required": ["action", "reply", "prompt", "strength"],
+    "required": ["action", "reply", "prompt", "strength", "targets", "where", "remove"],
 }
 
 
@@ -98,10 +114,14 @@ def warm_up():
     ollama.generate(model=LLM_MODEL, prompt="", keep_alive=KEEP_ALIVE)
 
 
-def unload():
-    # Звільняє пам'ять для художньої моделі
+def unload(wait=15):
+    # Звільняє пам'ять для художньої моделі і чекає, поки Ollama справді її віддасть.
+    # Якщо художник почне раніше, йому не вистачить відеопам'яті і він працюватиме в рази повільніше.
     try:
         ollama.generate(model=LLM_MODEL, prompt="", keep_alive=0)
+        deadline = time.time() + wait
+        while time.time() < deadline and ollama.ps().models:
+            time.sleep(0.3)
     except Exception:
         pass
 
@@ -125,26 +145,40 @@ def chat_with_retry(attempts=3, **request):
             time.sleep(3 * (attempt + 1))
 
 
+def latest_image(messages):
+    # Останнє зображення в чаті: створене Linum або надіслане користувачем
+    for message in reversed(messages):
+        for key in ("image", "attachment"):
+            if message.get(key) and Path(message[key]).exists():
+                return message[key]
+    return None
+
+
 def history_from_chat(messages):
     # Перетворює повідомлення чату Linum на розмову, зрозумілу моделі.
-    # Саму картинку модель отримує лише з останнього фото користувача: кожне фото вона
-    # розглядає кілька секунд, тож старі фото лише згадуємо словами.
-    last_attachment = None
-    for message in messages:
-        if message.get("kind") == "user" and message.get("attachment") and Path(message["attachment"]).exists():
-            last_attachment = message["attachment"]
+    # Модель бачить лише одне, останнє зображення чату: кожне фото вона розглядає
+    # кілька секунд, тож старі фото лише згадуємо словами.
+    visible = latest_image(messages)
+    last_user = max((i for i, m in enumerate(messages) if m.get("kind") == "user"), default=None)
 
     history = []
-    for message in messages:
+    for index, message in enumerate(messages):
         kind = message.get("kind")
         if kind == "user":
             entry = {"role": "user", "content": message["text"] or "(фото без тексту)"}
             attachment = message.get("attachment")
-            if attachment and attachment == last_attachment:
+            if attachment and attachment == visible:
                 entry["images"] = [Path(attachment).read_bytes()]
                 entry["content"] = "[Користувач надіслав фото, воно додане до цього повідомлення]\n" + entry["content"]
             elif attachment:
                 entry["content"] = "[Користувач раніше надсилав фото]\n" + entry["content"]
+            elif index == last_user and visible:
+                # Показуємо останнє зображення, щоб модель бачила, про що мова ("прибери ось це")
+                entry["images"] = [Path(visible).read_bytes()]
+                entry["content"] = (
+                    "[До цього повідомлення додано останнє зображення з чату, щоб ти бачила, про що мова]\n"
+                    + entry["content"]
+                )
             history.append(entry)
         elif kind == "assistant":
             history.append({"role": "assistant", "content": message["text"]})
@@ -171,7 +205,8 @@ def decide(history):
     try:
         decision = json.loads(response["message"]["content"])
     except json.JSONDecodeError:
-        return {"action": "chat", "reply": clean(response["message"]["content"]), "prompt": "", "strength": 0}
+        return {"action": "chat", "reply": clean(response["message"]["content"]), "prompt": "", "strength": 0,
+                "targets": [], "where": "", "remove": False}
 
     action = decision.get("action")
     if action not in ("chat", "image", "edit"):
@@ -188,7 +223,22 @@ def decide(history):
         "reply": clean(str(decision.get("reply") or "")),
         "prompt": prompt,
         "strength": min(0.8, max(0.25, strength)),
+        # Назви предмета для "шукача": лише перші кілька слів, бо він розуміє короткі назви
+        "targets": clean_targets(decision.get("targets")) if action == "edit" else [],
+        "where": decision.get("where") if decision.get("where") in WHERE and action == "edit" else "",
+        "remove": bool(decision.get("remove")) and action == "edit",
     }
+
+
+def clean_targets(targets):
+    if isinstance(targets, str):
+        targets = [targets]
+    result = []
+    for target in targets or []:
+        short = " ".join(str(target).split()[:3]).strip().lower()
+        if short and short not in result:
+            result.append(short)
+    return result[:3]
 
 
 if __name__ == "__main__":

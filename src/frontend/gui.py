@@ -1206,7 +1206,11 @@ class LinumApp(ctk.CTk):
             ).pack(anchor="w", padx=14, pady=(2, 2))
 
         details = [message["model"]]
-        if message.get("source"):
+        if message.get("target") and message.get("target_found"):
+            details.append(f"{'Прибрано' if message.get('remove') else 'Змінено'}: {message['target']}")
+        elif message.get("target"):
+            details.append(f"Не знайдено «{message['target']}», змінено все фото")
+        elif message.get("source"):
             details.append("Зміна фото")
         if message.get("style") and message["style"] != "Без стилю":
             details.append(message["style"])
@@ -1268,6 +1272,9 @@ class LinumApp(ctk.CTk):
             kind=message.get("kind"),
             source=source if source and Path(source).exists() else None,
             strength=message.get("strength"),
+            targets=message.get("targets") or ([message["target"]] if message.get("target") else None),
+            where=message.get("where", ""),
+            remove=bool(message.get("remove")),
         )
 
     # ---------- Моделі ----------
@@ -1504,6 +1511,9 @@ class LinumApp(ctk.CTk):
             source=source,
             strength=decision["strength"] if source else None,
             unload_brain=True,
+            targets=decision["targets"] if source else None,
+            where=decision["where"] if source else "",
+            remove=decision["remove"] if source else False,
         )
 
     def last_image(self, chat_id):
@@ -1522,8 +1532,11 @@ class LinumApp(ctk.CTk):
     # ---------- Створення і зміна зображень ----------
 
     def start_generation(self, prompt, english=None, language=None, style=None, size=None,
-                         show_bubble=True, kind=None, source=None, strength=None, unload_brain=False):
+                         show_bubble=True, kind=None, source=None, strength=None, unload_brain=False,
+                         targets=None, where="", remove=False):
         # source: шлях до фото, яке треба змінити. Без нього малюється нове зображення.
+        # targets: англійські назви предмета, який треба знайти на фото і змінити лише його.
+        # remove: прибрати цей предмет (місце заливається фоном і домальовується).
         if self.busy or self.pipe is None:
             return False
         chat = self.chats.get(self.current_chat_id)
@@ -1584,12 +1597,36 @@ class LinumApp(ctk.CTk):
                 if STYLES.get(style):
                     full_prompt = f"{english}, {STYLES[style]}"
                 negative = NEGATIVE_PROMPT if quality_boost else None
+                mask = None
+                found = None
+                edit_strength = strength
+                if source is not None and targets:
+                    # Шукаємо предмет на фото, щоб перемалювати лише його
+                    self.after(0, self._set_pending_title, f"Шукаю: {targets[0]}")
+                    from src.ai.segmenter import find_mask
+
+                    mask, found = find_mask(source, targets, where=where, remove=remove)
+                    if mask is not None and remove:
+                        # Запобіжник: "прибрати" не може стерти третину фото. Найімовірніше,
+                        # шукач сплутав предмет з головним об'єктом, тож краще нічого не прибирати.
+                        area = sum(1 for value in mask.getdata() if value) / (mask.width * mask.height)
+                        if area > 0.33:
+                            mask, found = None, None
+                    if mask is not None:
+                        self.after(0, self._set_pending_title, "Прибираю" if remove else "Змінюю зображення")
+                        if remove:
+                            # Прибираємо: художник не повинен намалювати цей предмет знову
+                            negative = ", ".join(targets) + ", " + (negative or "")
+                            edit_strength = 0.6
+                        else:
+                            # Зміна одного предмета потребує сильнішого перемальовування
+                            edit_strength = max(strength or 0.55, 0.7)
                 if source is None:
                     path = generate_image(pipe, full_prompt, model, on_step, negative, width, height, seed)
                 else:
                     path, steps = edit_image(
-                        pipe, source, full_prompt, strength=strength, model_name=model,
-                        on_step=on_step, negative_prompt=negative, seed=seed,
+                        pipe, source, full_prompt, mask=mask, strength=edit_strength, model_name=model,
+                        on_step=on_step, negative_prompt=negative, seed=seed, fill=remove and mask is not None,
                     )
             except Exception as error:
                 self.after(0, self._on_generate_failed, error)
@@ -1612,6 +1649,12 @@ class LinumApp(ctk.CTk):
             if source is not None:
                 message["source"] = str(source)
                 message["strength"] = strength
+                if targets:
+                    message["targets"] = targets
+                    message["where"] = where
+                    message["target"] = found or targets[0]
+                    message["remove"] = remove
+                    message["target_found"] = mask is not None
             self.after(0, self._on_generated, chat_id, message)
 
         threading.Thread(target=work, daemon=True).start()
@@ -1623,6 +1666,10 @@ class LinumApp(ctk.CTk):
         self.pending["title"].configure(text="Змінюю зображення" if self.pending.get("edit") else "Створюю зображення")
         if language != "en":
             self.pending["steps"].configure(text=shorten(f"Переклад: {english}", 54))
+
+    def _set_pending_title(self, text):
+        if self.pending is not None:
+            self.pending["title"].configure(text=text)
 
     def _update_progress(self, step, total):
         if self.pending is None:

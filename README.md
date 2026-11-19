@@ -22,6 +22,9 @@ python main.py
 | `src/ai/generator.py` | Завантаження моделі і створення картинки |
 | `src/ai/brain.py` | Мозок: мовна модель Gaia в Ollama, розмовляє і вирішує, що малювати чи змінювати |
 | `models/llm/Gaia.Modelfile` | Особистість Gaia. Після змін: `ollama create gaia-3.7 -f models/llm/Gaia.Modelfile` |
+| `src/ai/segmenter.py` | "Шукач" CLIPSeg: знаходить предмет на фото за назвою і робить маску для точного прибирання чи зміни |
+| `src/frontend/widgets.py` | Поле вводу, текст, який можна виділяти, меню правої кнопки, плавна поява |
+| `src/frontend/spinner.py` | Анімація "думаю" (кільце з точок) |
 | `src/ai/translator.py` | Переклад запитів з української і російської на англійську (коли мозок недоступний) |
 | `src/frontend/gui.py` | Вікно програми: чати, вибір моделі, налаштування |
 | `src/frontend/theme.py` | Кольори світлої і темної теми |
