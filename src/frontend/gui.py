@@ -1206,7 +1206,9 @@ class LinumApp(ctk.CTk):
             ).pack(anchor="w", padx=14, pady=(2, 2))
 
         details = [message["model"]]
-        if message.get("target") and message.get("target_found"):
+        if message.get("recolored"):
+            details.append(f"Перефарбовано: {message['target']}" if message.get("target") else "Перефарбовано")
+        elif message.get("target") and message.get("target_found"):
             details.append(f"{'Прибрано' if message.get('remove') else 'Змінено'}: {message['target']}")
         elif message.get("target"):
             details.append(f"Не знайдено «{message['target']}», змінено все фото")
@@ -1214,8 +1216,9 @@ class LinumApp(ctk.CTk):
             details.append("Зміна фото")
         if message.get("style") and message["style"] != "Без стилю":
             details.append(message["style"])
-        details += [f"{message['steps']} кроків", f"{message.get('seconds', 0)} с",
-                    datetime.fromisoformat(message["created"]).strftime("%H:%M")]
+        if message["steps"]:
+            details.append(f"{message['steps']} кроків")
+        details += [f"{message.get('seconds', 0)} с", datetime.fromisoformat(message["created"]).strftime("%H:%M")]
         ctk.CTkLabel(
             card, text="  ·  ".join(details), font=self.font(12), text_color=theme.MUTED, anchor="w"
         ).pack(fill="x", padx=14, pady=(2, 0))
@@ -1275,6 +1278,8 @@ class LinumApp(ctk.CTk):
             targets=message.get("targets") or ([message["target"]] if message.get("target") else None),
             where=message.get("where", ""),
             remove=bool(message.get("remove")),
+            colors=message.get("colors"),
+            box=tuple(message["box"]) if message.get("box") else None,
         )
 
     # ---------- Моделі ----------
@@ -1514,6 +1519,7 @@ class LinumApp(ctk.CTk):
             targets=decision["targets"] if source else None,
             where=decision["where"] if source else "",
             remove=decision["remove"] if source else False,
+            colors=decision["colors"] if source else None,
         )
 
     def last_image(self, chat_id):
@@ -1533,10 +1539,12 @@ class LinumApp(ctk.CTk):
 
     def start_generation(self, prompt, english=None, language=None, style=None, size=None,
                          show_bubble=True, kind=None, source=None, strength=None, unload_brain=False,
-                         targets=None, where="", remove=False):
+                         targets=None, where="", remove=False, colors=None, box=None):
         # source: шлях до фото, яке треба змінити. Без нього малюється нове зображення.
         # targets: англійські назви предмета, який треба знайти на фото і змінити лише його.
         # remove: прибрати цей предмет (місце заливається фоном і домальовується).
+        # colors: лише перефарбувати предмет, без художника: [{"from": "#...", "to": "#..."}].
+        # box: рамка предмета (x1, y1, x2, y2), якщо вже відома (наприклад, для "Ще варіант").
         if self.busy or self.pipe is None:
             return False
         chat = self.chats.get(self.current_chat_id)
@@ -1577,15 +1585,19 @@ class LinumApp(ctk.CTk):
             self.after(0, self._update_progress, step, total)
 
         def work():
-            nonlocal english, language, steps
+            nonlocal english, language, steps, box
             try:
-                from src.ai.generator import edit_image, generate_image
+                from src.ai.generator import edit_image, generate_image, save_image
                 from src.ai.translator import to_english
 
                 if unload_brain:
-                    # Мозок і художник разом не вміщаються в пам'ять, тому мозок на час малювання вивантажуємо
                     from src.ai import brain
 
+                    if source is not None and targets and box is None:
+                        # Поки Gaia ще в пам'яті, просимо її показати рамкою, де предмет
+                        self.after(0, self._set_pending_title, f"Шукаю: {targets[0]}")
+                        box = brain.locate(source, targets[0], where)
+                    # Мозок і художник разом не вміщаються в пам'ять, тому мозок на час малювання вивантажуємо
                     brain.unload()
                 if english is None:
                     if translate:
@@ -1605,7 +1617,7 @@ class LinumApp(ctk.CTk):
                     self.after(0, self._set_pending_title, f"Шукаю: {targets[0]}")
                     from src.ai.segmenter import find_mask
 
-                    mask, found = find_mask(source, targets, where=where, remove=remove)
+                    mask, found = find_mask(source, targets, where=where, remove=remove, box=box)
                     if mask is not None and remove:
                         # Запобіжник: "прибрати" не може стерти третину фото. Найімовірніше,
                         # шукач сплутав предмет з головним об'єктом, тож краще нічого не прибирати.
@@ -1621,7 +1633,17 @@ class LinumApp(ctk.CTk):
                         else:
                             # Зміна одного предмета потребує сильнішого перемальовування
                             edit_strength = max(strength or 0.55, 0.7)
-                if source is None:
+                recolored = bool(colors) and source is not None and (mask is not None or not targets)
+                if recolored:
+                    # Лише колір: міняємо його точно по пікселях, художник не потрібен
+                    from src.ai.recolor import recolor
+
+                    self.after(0, self._set_pending_title, "Перефарбовую")
+                    with Image.open(source) as original:
+                        whole = Image.new("L", original.size, 255)
+                        path = save_image(recolor(original, mask if mask is not None else whole, colors))
+                    steps = 0
+                elif source is None:
                     path = generate_image(pipe, full_prompt, model, on_step, negative, width, height, seed)
                 else:
                     path, steps = edit_image(
@@ -1655,6 +1677,11 @@ class LinumApp(ctk.CTk):
                     message["target"] = found or targets[0]
                     message["remove"] = remove
                     message["target_found"] = mask is not None
+                    if box is not None:
+                        message["box"] = [round(value) for value in box]
+                if colors:
+                    message["colors"] = colors
+                    message["recolored"] = recolored
             self.after(0, self._on_generated, chat_id, message)
 
         threading.Thread(target=work, daemon=True).start()

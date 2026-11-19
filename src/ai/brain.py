@@ -45,6 +45,16 @@ RULES = """
   "bottom-left", "bottom-right". Подивись на зображення. Якщо предмет займає майже все фото або "targets" порожній, "".
 - "remove": true, якщо цей предмет треба прибрати. Тоді "prompt" описує, що має бути на його місці
   (фон, підлога, небо), наприклад "empty grey studio floor, soft shadow". Інакше false.
+- "colors": тільки для "edit", коли треба ЛИШЕ змінити колір предмета, а форма і все інше лишаються
+  (перефарбувати, поміняти кольори місцями). Список змін {"from": ..., "to": ...}, кольори у форматі "#RRGGBB".
+  "from" - колір, який ЗАРАЗ є на предметі (подивись на фото), або "", якщо весь предмет стає одного кольору.
+  "to" - новий колір. "targets" тоді називає весь предмет.
+  Приклади:
+  "зроби робота червоним": [{"from": "", "to": "#C62828"}]
+  "поміняй місцями червоний і чорний": [{"from": "#8E2B2B", "to": "#1C1C1C"}, {"from": "#1C1C1C", "to": "#8E2B2B"}]
+  "хай червоне буде зверху, а чорне знизу", коли на фото навпаки: це теж обмін, як у прикладі вище.
+  "зроби червоні частини синіми": [{"from": "#B71C1C", "to": "#1E4FB0"}]
+  Якщо змінюється не лише колір (форма, новий предмет, стиль, освітлення) або все фото цілком: [].
 
 Як обирати action:
 - "image": користувач просить намалювати, створити, згенерувати, показати нове зображення.
@@ -86,9 +96,27 @@ DECISION_FORMAT = {
         "targets": {"type": "array", "items": {"type": "string"}},
         "where": {"type": "string", "enum": ["", *WHERE]},
         "remove": {"type": "boolean"},
+        "colors": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"from": {"type": "string"}, "to": {"type": "string"}},
+                "required": ["from", "to"],
+            },
+        },
     },
-    "required": ["action", "reply", "prompt", "strength", "targets", "where", "remove"],
+    "required": ["action", "reply", "prompt", "strength", "targets", "where", "remove", "colors"],
 }
+
+# Рамка предмета: [верх, лівий край, низ, правий край] у частках від 0 до 1000.
+# Саме в такому вигляді модель навчена позначати предмети на фото.
+BOX_FORMAT = {
+    "type": "object",
+    "properties": {"box_2d": {"type": "array", "items": {"type": "integer"}}},
+    "required": ["box_2d"],
+}
+
+HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
 def identity():
@@ -192,7 +220,7 @@ def history_from_chat(messages):
 
 
 def decide(history):
-    """Повертає рішення: {"action", "reply", "prompt", "strength"}."""
+    """Повертає рішення: {"action", "reply", "prompt", "strength", "targets", "where", "remove", "colors"}."""
     messages = [{"role": "system", "content": identity() + "\n" + RULES}] + history
     response = chat_with_retry(
         model=LLM_MODEL,
@@ -206,7 +234,7 @@ def decide(history):
         decision = json.loads(response["message"]["content"])
     except json.JSONDecodeError:
         return {"action": "chat", "reply": clean(response["message"]["content"]), "prompt": "", "strength": 0,
-                "targets": [], "where": "", "remove": False}
+                "targets": [], "where": "", "remove": False, "colors": []}
 
     action = decision.get("action")
     if action not in ("chat", "image", "edit"):
@@ -227,7 +255,52 @@ def decide(history):
         "targets": clean_targets(decision.get("targets")) if action == "edit" else [],
         "where": decision.get("where") if decision.get("where") in WHERE and action == "edit" else "",
         "remove": bool(decision.get("remove")) and action == "edit",
+        "colors": clean_colors(decision.get("colors")) if action == "edit" and not decision.get("remove") else [],
     }
+
+
+def clean_colors(colors):
+    # Лишаємо тільки правильні зміни кольору: "to" обов'язково у форматі #RRGGBB
+    result = []
+    for change in colors if isinstance(colors, list) else []:
+        if not isinstance(change, dict) or not HEX.match(str(change.get("to", ""))):
+            continue
+        start = str(change.get("from") or "")
+        result.append({"from": start if HEX.match(start) else "", "to": change["to"]})
+    if any(not change["from"] for change in result):
+        # "Весь предмет одним кольором" не поєднується з іншими змінами
+        result = [next(change for change in result if not change["from"])]
+    return result[:4]
+
+
+def locate(image_path, name, where=""):
+    """Просить Gaia обвести предмет рамкою. Повертає (x1, y1, x2, y2) у пікселях або None."""
+    from PIL import Image
+
+    hint = f" It is in the {where.replace('-', ' ')} part of the image." if where else ""
+    try:
+        response = chat_with_retry(
+            model=LLM_MODEL,
+            messages=[{
+                "role": "user",
+                "content": f"Detect the {name} in the image.{hint} Return its bounding box as box_2d "
+                           "[ymin, xmin, ymax, xmax] normalized to 0-1000.",
+                "images": [Path(image_path).read_bytes()],
+            }],
+            format=BOX_FORMAT,
+            think=False,
+            keep_alive=KEEP_ALIVE,
+            options={"temperature": 0},
+        )
+        top, left, bottom, right = [min(1000.0, max(0.0, float(v))) for v in
+                                    json.loads(response["message"]["content"])["box_2d"][:4]]
+        with Image.open(image_path) as image:
+            width, height = image.size
+    except Exception:
+        return None
+    if right - left < 10 or bottom - top < 10:
+        return None
+    return left * width / 1000, top * height / 1000, right * width / 1000, bottom * height / 1000
 
 
 def clean_targets(targets):
