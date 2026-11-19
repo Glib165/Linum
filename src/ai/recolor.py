@@ -77,14 +77,19 @@ def shift(pixels, mean, new_mean, light_ratio):
     return np.concatenate([light, tint], axis=1)
 
 
-def recolor(image, mask, changes):
+def recolor(image, mask, changes, even=False):
     """Перефарбовує предмет під маскою.
+
+    even=True: зробити всю маску рівно кольором "to" (для recolor_parts): змінюються всі пікселі,
+    а "старі" кольори беруться точно такими, як передані, без уточнення по фото.
 
     changes: список {"from": "#RRGGBB" або "", "to": "#RRGGBB"}.
     "from" порожній означає "весь предмет у колір to".
     Кілька змін з "from" дозволяють поміняти кольори місцями.
     """
     image = image.convert("RGB")
+    if any(change.get("part") for change in changes):
+        return recolor_parts(image, mask, changes)
     lab = rgb_to_lab(np.asarray(image, dtype=float) / 255)
     inside = np.asarray(mask.convert("L").resize(image.size)) > 127
     pixels = lab[inside]
@@ -94,18 +99,22 @@ def recolor(image, mask, changes):
     with_from = [change for change in changes if change.get("from")]
     if with_from:
         targets = [hex_to_lab(change["to"]) for change in with_from]
-        centers = groups_of_colors(pixels, np.array([hex_to_lab(change["from"]) for change in with_from]))
+        centers = np.array([hex_to_lab(change["from"]) for change in with_from])
+        if not even:
+            centers = groups_of_colors(pixels, centers)
     else:
         targets = [hex_to_lab(changes[0]["to"])]
         centers = pixels.mean(0, keepdims=True)
 
+    # even: змінити всі пікселі предмета, навіть зовсім несхожі на "старі" кольори
+    limit = KEEP_DISTANCE if with_from and not even else 1e6
     distance = distances(pixels, centers)
     nearest = distance.argmin(1)
-    close = distance.min(1) < KEEP_DISTANCE if with_from else np.ones(len(pixels), bool)
+    close = distance.min(1) < limit
 
     # Скільки кожна зміна впливає на піксель: найближчий колір майже повністю,
     # а пікселі на межі двох кольорів отримують суміш, тож межа не буде "рваною"
-    scores = np.concatenate([distance, np.full((len(pixels), 1), KEEP_DISTANCE if with_from else 1e6)], axis=1)
+    scores = np.concatenate([distance, np.full((len(pixels), 1), limit)], axis=1)
     weights = np.exp(-(scores ** 2 - (scores.min(1, keepdims=True)) ** 2) / (2 * SOFTNESS ** 2))
     weights /= weights.sum(1, keepdims=True)
     if len(with_from) > 1:
@@ -119,10 +128,10 @@ def recolor(image, mask, changes):
         mean, spread = group.mean(0), max(group[:, 0].std(), 2)
         # Якщо новий колір уже є на предметі (обмін кольорів), беремо його справжній вигляд
         # з фото: той самий відтінок, ті самі тіні. Так результат виглядає природно.
-        others = [i for i in range(len(centers)) if i != index]
-        match = min(others, key=lambda i: distances(target[None], centers[i:i + 1])[0, 0], default=None)
+        # (Серед кандидатів і сама група: якщо колір уже потрібний, вона лишається як є)
+        match = min(range(len(centers)), key=lambda i: distances(target[None], centers[i:i + 1])[0, 0])
         other = pixels[(nearest == match) & close] if match is not None else pixels[:0]
-        if len(other) and distances(target[None], centers[match:match + 1])[0, 0] < 20:
+        if not even and len(other) and distances(target[None], centers[match:match + 1])[0, 0] < 20:
             new_mean = other.mean(0)
             light_ratio = np.clip(max(other[:, 0].std(), 2) / spread, 0.5, 2)
         else:
@@ -137,6 +146,74 @@ def recolor(image, mask, changes):
     # М'який край маски, щоб предмет не виглядав вирізаним ножицями
     edge = Image.fromarray(inside.astype("uint8") * 255).filter(ImageFilter.GaussianBlur(1.2))
     return Image.composite(recolored, image, edge)
+
+
+def split_mask(mask, part):
+    """Повертає половину маски предмета: "top", "bottom", "left" або "right".
+
+    Ділимо кожен стовпчик пікселів окремо (для "left"/"right" кожен рядок), тож межа
+    йде вздовж форми предмета: на хвилястому прапорі вона теж хвиляста, а не пряма.
+    """
+    inside = np.asarray(mask.convert("L")) > 127
+    if part in ("left", "right"):
+        # Повертаємо маску набік (рядки стають стовпчиками), щоб ліве і праве рахувати так само, як верх і низ
+        inside = inside.T
+    rows = np.arange(inside.shape[0])[:, None]
+    columns = np.arange(inside.shape[1])
+    filled = inside.any(axis=0)
+    # Для кожного стовпчика: де предмет починається і де закінчується
+    first = np.where(filled, inside.argmax(axis=0), 0)
+    last = np.where(filled, inside.shape[0] - 1 - inside[::-1].argmax(axis=0), 0)
+    span = (last - first + 1) * filled
+    # Середина кожного стовпчика надійна лише там, де предмет "повний". Біля скошених країв
+    # стовпчик зачіпає лише шматочок предмета, і його середина хибна. Тому через надійні
+    # середини проводимо плавну криву (параболу) і беремо середину з неї для всіх стовпчиків.
+    good = span >= np.median(span[filled]) * 0.6
+    if good.sum() >= 3:
+        curve = np.polyfit(columns[good], ((first + last + 1) / 2)[good], deg=2, w=span[good])
+        middle = np.polyval(curve, columns)
+    else:
+        middle = (first + last + 1) / 2
+    half = inside & ((rows < middle) if part in ("top", "left") else (rows >= middle))
+    if part in ("left", "right"):
+        half = half.T
+    return Image.fromarray(half.astype("uint8") * 255)
+
+
+def main_colors(pixels, count=2):
+    # Головні кольори предмета (наприклад, червоний і чорний на прапорі).
+    # Починаємо з "середнього" пікселя і з того, що найбільше від нього відрізняється,
+    # а потім уточнюємо методом k-середніх.
+    start = np.median(pixels, axis=0)
+    far = distances(pixels, start[None])[:, 0]
+    # Не найдальший піксель (це може бути випадкова цятка), а один з найдальших
+    second = pixels[np.argsort(far)[int(len(far) * 0.95)]]
+    starts = np.array([start, second])[:count]
+    return groups_of_colors(pixels, starts)
+
+
+def lab_to_hex(lab):
+    red, green, blue = (np.clip(lab_to_rgb(lab), 0, 1) * 255 + 0.5).astype(int)
+    return f"#{red:02X}{green:02X}{blue:02X}"
+
+
+def recolor_parts(image, mask, changes):
+    # Кожна зміна з "part" фарбує свою частину предмета одним рівним кольором,
+    # навіть якщо там зараз кілька кольорів (наприклад, і червоне, і чорне).
+    # Для цього кожен з головних кольорів предмета окремо переводимо в новий колір:
+    # так стара межа між червоним і чорним зникає, а складки й текстура лишаються.
+    lab = rgb_to_lab(np.asarray(image, dtype=float) / 255)
+    # Трохи ширше за контур, щоб захопити край тканини: інакше вздовж краю лишається стара смужка
+    mask = mask.convert("L").resize(image.size).filter(ImageFilter.MaxFilter(5))
+    inside = np.asarray(mask) > 127
+    if not inside.any():
+        return image
+    found = [lab_to_hex(color) for color in main_colors(lab[inside])]
+    full = Image.fromarray(inside.astype("uint8") * 255)
+    for change in changes:
+        part = split_mask(full, change["part"]) if change.get("part") else full
+        image = recolor(image, part, [{"from": color, "to": change["to"]} for color in found], even=True)
+    return image
 
 
 def blur(array, radius):

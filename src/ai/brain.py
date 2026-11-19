@@ -54,6 +54,10 @@ RULES = """
   "поміняй місцями червоний і чорний": [{"from": "#8E2B2B", "to": "#1C1C1C"}, {"from": "#1C1C1C", "to": "#8E2B2B"}]
   "хай червоне буде зверху, а чорне знизу", коли на фото навпаки: це теж обмін, як у прикладі вище.
   "зроби червоні частини синіми": [{"from": "#B71C1C", "to": "#1E4FB0"}]
+  "part" - у яку частину предмета йде колір: "top", "bottom", "left", "right" або "" (весь предмет).
+  Потрібно, коли користувач хоче змінити, ДЕ на предметі який колір (наприклад, кольори порівну, навпіл):
+  "зроби прапор навпіл: червоний зверху, чорний знизу":
+  [{"from": "", "to": "#C62828", "part": "top"}, {"from": "", "to": "#1C1C1C", "part": "bottom"}]
   Якщо змінюється не лише колір (форма, новий предмет, стиль, освітлення) або все фото цілком: [].
 
 Як обирати action:
@@ -85,6 +89,7 @@ def clean(text):
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
 
 WHERE = ["top", "bottom", "left", "right", "center", "top-left", "top-right", "bottom-left", "bottom-right"]
+PARTS = ["top", "bottom", "left", "right"]
 
 DECISION_FORMAT = {
     "type": "object",
@@ -100,8 +105,12 @@ DECISION_FORMAT = {
             "type": "array",
             "items": {
                 "type": "object",
-                "properties": {"from": {"type": "string"}, "to": {"type": "string"}},
-                "required": ["from", "to"],
+                "properties": {
+                    "from": {"type": "string"},
+                    "to": {"type": "string"},
+                    "part": {"type": "string", "enum": ["", *PARTS]},
+                },
+                "required": ["from", "to", "part"],
             },
         },
     },
@@ -266,10 +275,11 @@ def clean_colors(colors):
         if not isinstance(change, dict) or not HEX.match(str(change.get("to", ""))):
             continue
         start = str(change.get("from") or "")
-        result.append({"from": start if HEX.match(start) else "", "to": change["to"]})
-    if any(not change["from"] for change in result):
+        part = change.get("part") if change.get("part") in PARTS else ""
+        result.append({"from": start if HEX.match(start) else "", "to": change["to"], "part": part})
+    if any(not change["from"] and not change["part"] for change in result):
         # "Весь предмет одним кольором" не поєднується з іншими змінами
-        result = [next(change for change in result if not change["from"])]
+        result = [next(change for change in result if not change["from"] and not change["part"])]
     return result[:4]
 
 
