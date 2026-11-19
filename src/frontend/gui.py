@@ -29,6 +29,7 @@ from config.config import (
     UPLOADS_DIR,
     SIZES,
     STYLES,
+    REASONING,
 )
 from src.backend.services.chat_store import ChatStore
 from src.backend.services.settings_store import SettingsStore
@@ -1205,7 +1206,16 @@ class LinumApp(ctk.CTk):
                 text_color=theme.MUTED, bg=theme.SURFACE,
             ).pack(anchor="w", padx=14, pady=(2, 2))
 
+        if message.get("review"):
+            # Gaia перевірила перший варіант, знайшла проблему і перемалювала
+            SelectableText(
+                card, f"Перевірка: {message['review']} Перемальовано.", self.font(12),
+                max_width=IMAGE_SIZE - 10, text_color=theme.MUTED, bg=theme.SURFACE,
+            ).pack(anchor="w", padx=14, pady=(2, 2))
+
         details = [message["model"]]
+        if message.get("checked") and not message.get("review"):
+            details.append("Перевірено")
         if message.get("recolored"):
             details.append(f"Перефарбовано: {message['target']}" if message.get("target") else "Перефарбовано")
         elif message.get("target") and message.get("target_found"):
@@ -1390,19 +1400,27 @@ class LinumApp(ctk.CTk):
 
     # ---------- Мозок ----------
 
+    def reasoning(self):
+        # Налаштування вибраного рівня міркувань: {"model", "think", "check"}
+        from src.ai import brain
+
+        return brain.level(self.settings.get("reasoning"))
+
     def _check_brain(self):
-        # Перевіряємо у фоні, чи запущена Ollama з нашою моделлю, і одразу завантажуємо її
+        # Перевіряємо у фоні, чи запущена Ollama з моделлю вибраного рівня, і одразу завантажуємо її
+        model = self.reasoning()["model"]
+
         def work():
             try:
                 from src.ai import brain
 
-                ready = brain.is_available()
+                ready = brain.is_available(model)
             except Exception:
                 ready = False
             self.after(0, self._on_brain_checked, ready)
             if ready:
                 try:
-                    brain.warm_up()
+                    brain.warm_up(model)
                 except Exception:
                     pass
 
@@ -1445,7 +1463,8 @@ class LinumApp(ctk.CTk):
         self._add_thinking()
         self._scroll_to_bottom()
         self._set_busy(True, generating=True)
-        self.set_status("Linum думає...")
+        settings = self.reasoning()
+        self.set_status("Linum міркує, це може зайняти хвилину-дві..." if settings["think"] else "Linum думає...")
         history_messages = list(chat["messages"])
 
         def work():
@@ -1454,7 +1473,7 @@ class LinumApp(ctk.CTk):
 
                 # Художник міг лишити зайняту відеопам'ять. Віддаємо її, щоб Gaia завантажилась.
                 free_gpu_memory()
-                decision = brain.decide(brain.history_from_chat(history_messages))
+                decision = brain.decide(brain.history_from_chat(history_messages), settings)
             except Exception as error:
                 self.after(0, self._on_brain_failed, chat_id, text, error)
                 return
@@ -1578,6 +1597,7 @@ class LinumApp(ctk.CTk):
         chat_id = chat["id"]
         pipe = self.pipe
         started = time.time()
+        settings = self.reasoning()
         self._set_busy(True, generating=True)
         self.set_status(f"Створюю зображення моделлю {model}...")
 
@@ -1585,7 +1605,9 @@ class LinumApp(ctk.CTk):
             self.after(0, self._update_progress, step, total)
 
         def work():
-            nonlocal english, language, steps, box
+            nonlocal english, language, steps, box, seed
+            review = None
+            first_image = None
             try:
                 from src.ai.generator import edit_image, generate_image, save_image
                 from src.ai.translator import to_english
@@ -1596,7 +1618,7 @@ class LinumApp(ctk.CTk):
                     if source is not None and targets and box is None:
                         # Поки Gaia ще в пам'яті, просимо її показати рамкою, де предмет
                         self.after(0, self._set_pending_title, f"Шукаю: {targets[0]}")
-                        box = brain.locate(source, targets[0], where)
+                        box = brain.locate(source, targets[0], where, model=settings["model"])
                     # Мозок і художник разом не вміщаються в пам'ять, тому мозок на час малювання вивантажуємо
                     brain.unload()
                 if english is None:
@@ -1633,6 +1655,15 @@ class LinumApp(ctk.CTk):
                         else:
                             # Зміна одного предмета потребує сильнішого перемальовування
                             edit_strength = max(strength or 0.55, 0.7)
+                def draw(text, seed):
+                    # Малює нове зображення або змінює фото. Повертає (шлях, кроки).
+                    if source is None:
+                        return generate_image(pipe, text, model, on_step, negative, width, height, seed), steps
+                    return edit_image(
+                        pipe, source, text, mask=mask, strength=edit_strength, model_name=model,
+                        on_step=on_step, negative_prompt=negative, seed=seed, fill=remove and mask is not None,
+                    )
+
                 recolored = bool(colors) and source is not None and (mask is not None or not targets)
                 if recolored:
                     # Лише колір: міняємо його точно по пікселях, художник не потрібен
@@ -1643,13 +1674,26 @@ class LinumApp(ctk.CTk):
                         whole = Image.new("L", original.size, 255)
                         path = save_image(recolor(original, mask if mask is not None else whole, colors))
                     steps = 0
-                elif source is None:
-                    path = generate_image(pipe, full_prompt, model, on_step, negative, width, height, seed)
                 else:
-                    path, steps = edit_image(
-                        pipe, source, full_prompt, mask=mask, strength=edit_strength, model_name=model,
-                        on_step=on_step, negative_prompt=negative, seed=seed, fill=remove and mask is not None,
-                    )
+                    path, steps = draw(full_prompt, seed)
+
+                if settings["check"] and unload_brain and not recolored:
+                    # Gaia дивиться на готову картинку. Якщо вийшло не те, перемальовує один раз
+                    # за її виправленим описом. Художника спершу прибираємо з відеопам'яті.
+                    from src.ai import brain
+
+                    free_gpu_memory()
+                    self.after(0, self._set_pending_title, "Перевіряю результат")
+                    verdict = brain.review(path, prompt, english, settings)
+                    if verdict is not None and not verdict["ok"]:
+                        review = verdict["problem"]
+                        first_image = path
+                        brain.unload()
+                        self.after(0, self._set_pending_title, "Перемальовую")
+                        english = verdict["prompt"]
+                        full_prompt = f"{english}, {STYLES[style]}" if STYLES.get(style) else english
+                        seed = random.randint(0, 2**31 - 1)
+                        path, steps = draw(full_prompt, seed)
             except Exception as error:
                 self.after(0, self._on_generate_failed, error)
                 return
@@ -1668,6 +1712,12 @@ class LinumApp(ctk.CTk):
             }
             if kind:
                 message["kind"] = kind
+            if settings["check"] and unload_brain and not recolored:
+                message["checked"] = True
+                if review is not None:
+                    # Що Gaia не сподобалось у першому варіанті, і сам перший варіант
+                    message["review"] = review
+                    message["first_image"] = str(first_image)
             if source is not None:
                 message["source"] = str(source)
                 message["strength"] = strength
@@ -2074,6 +2124,23 @@ class LinumApp(ctk.CTk):
 
     def _settings_generation(self, content):
         self._settings_title(content, "Генерація")
+
+        def reasoning_changed(value):
+            self.settings.set("reasoning", value)
+            # У нового рівня може бути інша модель: перевіряємо, чи вона є, і завантажуємо її
+            self._check_brain()
+
+        row = self._setting_row(
+            content,
+            "Рівень міркувань",
+            "Низький найшвидший. Високий і Ультра думають перед відповіддю. "
+            "Середній і Ультра перевіряють готову картинку",
+        )
+        selector = ctk.CTkSegmentedButton(
+            row, values=list(REASONING.keys()), command=reasoning_changed, **self.segmented_style()
+        )
+        selector.set(self.settings.get("reasoning"))
+        selector.grid(row=0, column=1, sticky="e")
 
         row = self._setting_row(content, "Модель", "Fornax швидка, Gaia збалансована, Cygnus найкраща")
         model_menu = None

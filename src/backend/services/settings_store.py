@@ -3,7 +3,8 @@
 import json
 from pathlib import Path
 
-from config.config import DEFAULT_MODEL
+from config.config import DEFAULT_MODEL, DEFAULT_REASONING
+
 
 DEFAULTS = {
     "theme": "system",
@@ -14,6 +15,7 @@ DEFAULTS = {
     "name": "",
     "quality_boost": True,
     "translate": True,
+    "reasoning": DEFAULT_REASONING,
 }
 
 

@@ -53,6 +53,18 @@ SIZES = {
 # gaia-3.7 це наша власна модель в Ollama, зібрана з gemma4:26b (див. models/llm/Gaia.Modelfile)
 LLM_MODEL = "gaia-3.7"
 
+# Рівні міркувань Gaia.
+# model: яка мовна модель в Ollama відповідає
+# think: чи міркує вона перед відповіддю (довше, але розумніше)
+# check: чи дивиться на готову картинку і перемальовує, якщо вийшло не те
+REASONING = {
+    "Низький": {"model": "gemma4:e4b-it-qat", "think": False, "check": False},
+    "Середній": {"model": "gaia-3.7", "think": False, "check": True},
+    "Високий": {"model": "gaia-3.7", "think": True, "check": False},
+    "Ультра": {"model": "gaia-3.7", "think": True, "check": True}
+}
+DEFAULT_REASONING = "Середній"
+
 # Іконка програми
 ICON_PATH = "assets/icons/source/linum-icon-1-outline.jpg"
 ICO_PATH = "assets/icons/exported/linum.ico"

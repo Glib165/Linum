@@ -14,7 +14,7 @@ from pathlib import Path
 import httpx
 import ollama
 
-from config.config import LLM_MODEL
+from config.config import DEFAULT_REASONING, LLM_MODEL, REASONING
 
 MODELFILE = Path("models/llm/Gaia.Modelfile")
 
@@ -137,25 +137,32 @@ def identity():
     return "Ти Gaia, штучний інтелект програми Linum."
 
 
-def is_available():
-    # Чи запущена Ollama і чи є в ній наша модель
+def level(name):
+    # Налаштування рівня міркувань з config.py; невідома назва означає рівень за замовчуванням
+    return REASONING.get(name, REASONING[DEFAULT_REASONING])
+
+
+def is_available(model=LLM_MODEL):
+    # Чи запущена Ollama і чи є в ній потрібна модель
     try:
-        names = [model.model for model in ollama.list().models]
+        names = [item.model for item in ollama.list().models]
     except Exception:
         return False
-    return any(name == LLM_MODEL or name.split(":")[0] == LLM_MODEL for name in names)
+    return any(name == model or name.split(":")[0] == model or name == f"{model}:latest" for name in names)
 
 
-def warm_up():
+def warm_up(model=LLM_MODEL):
     # Завантажує модель у пам'ять заздалегідь, щоб перша відповідь не чекала
-    ollama.generate(model=LLM_MODEL, prompt="", keep_alive=KEEP_ALIVE)
+    ollama.generate(model=model, prompt="", keep_alive=KEEP_ALIVE)
 
 
 def unload(wait=15):
     # Звільняє пам'ять для художньої моделі і чекає, поки Ollama справді її віддасть.
     # Якщо художник почне раніше, йому не вистачить відеопам'яті і він працюватиме в рази повільніше.
+    # Вивантажуємо всі мовні моделі, бо рівень міг змінитися і в пам'яті лишилась інша.
     try:
-        ollama.generate(model=LLM_MODEL, prompt="", keep_alive=0)
+        for item in ollama.ps().models:
+            ollama.generate(model=item.model, prompt="", keep_alive=0)
         deadline = time.time() + wait
         while time.time() < deadline and ollama.ps().models:
             time.sleep(0.3)
@@ -228,14 +235,18 @@ def history_from_chat(messages):
     return history[-HISTORY_LIMIT:]
 
 
-def decide(history):
-    """Повертає рішення: {"action", "reply", "prompt", "strength", "targets", "where", "remove", "colors"}."""
+def decide(history, settings=None):
+    """Повертає рішення: {"action", "reply", "prompt", "strength", "targets", "where", "remove", "colors"}.
+
+    settings: рівень міркувань з REASONING (яка модель і чи думати перед відповіддю).
+    """
+    settings = settings or level(DEFAULT_REASONING)
     messages = [{"role": "system", "content": identity() + "\n" + RULES}] + history
     response = chat_with_retry(
-        model=LLM_MODEL,
+        model=settings["model"],
         messages=messages,
         format=DECISION_FORMAT,
-        think=False,
+        think=settings["think"],
         keep_alive=KEEP_ALIVE,
         options={"temperature": 0.6},
     )
@@ -283,14 +294,14 @@ def clean_colors(colors):
     return result[:4]
 
 
-def locate(image_path, name, where=""):
+def locate(image_path, name, where="", model=LLM_MODEL):
     """Просить Gaia обвести предмет рамкою. Повертає (x1, y1, x2, y2) у пікселях або None."""
     from PIL import Image
 
     hint = f" It is in the {where.replace('-', ' ')} part of the image." if where else ""
     try:
         response = chat_with_retry(
-            model=LLM_MODEL,
+            model=model,
             messages=[{
                 "role": "user",
                 "content": f"Detect the {name} in the image.{hint} Return its bounding box as box_2d "
@@ -311,6 +322,53 @@ def locate(image_path, name, where=""):
     if right - left < 10 or bottom - top < 10:
         return None
     return left * width / 1000, top * height / 1000, right * width / 1000, bottom * height / 1000
+
+
+REVIEW_FORMAT = {
+    "type": "object",
+    "properties": {"ok": {"type": "boolean"}, "problem": {"type": "string"}, "prompt": {"type": "string"}},
+    "required": ["ok", "problem", "prompt"],
+}
+
+REVIEW_RULES = """
+Ти перевіряєш картинку, яку щойно намалювала художня модель Stable Diffusion на прохання користувача.
+Подивись на зображення і суворо оціни, чи виконано прохання: головний предмет, кількість, кольори,
+розташування, а також явні вади (зайві чи злиплі пальці, спотворені обличчя, зайві голови й кінцівки,
+предмети, яких не просили). Дрібниці, які людина не помітить, не рахуються.
+Відповідай JSON:
+- "ok": true, якщо картинка добра і відповідає проханню; false, якщо є помітна проблема.
+- "problem": коротко українською, що не так (одне речення). Якщо ok, "".
+- "prompt": якщо ok false, новий опис АНГЛІЙСЬКОЮ для художника (20-60 слів через кому), який виправить
+  проблему: головне пиши на початку і чітко. Якщо ok, "".
+Ніколи не використовуй емодзі.
+"""
+
+
+def review(image_path, request, prompt, settings=None):
+    """Gaia дивиться на готову картинку. Повертає {"ok", "problem", "prompt"} або None, якщо не вдалося."""
+    settings = settings or level(DEFAULT_REASONING)
+    try:
+        response = chat_with_retry(
+            model=settings["model"],
+            messages=[
+                {"role": "system", "content": identity() + "\n" + REVIEW_RULES},
+                {
+                    "role": "user",
+                    "content": f"Прохання користувача: {request}\nОпис, за яким малював художник: {prompt}",
+                    "images": [Path(image_path).read_bytes()],
+                },
+            ],
+            format=REVIEW_FORMAT,
+            think=settings["think"],
+            keep_alive=KEEP_ALIVE,
+            options={"temperature": 0.2},
+        )
+        verdict = json.loads(response["message"]["content"])
+    except Exception:
+        return None
+    better = str(verdict.get("prompt") or "").strip()
+    ok = bool(verdict.get("ok")) or not better
+    return {"ok": ok, "problem": "" if ok else clean(str(verdict.get("problem") or "")), "prompt": better}
 
 
 def clean_targets(targets):
