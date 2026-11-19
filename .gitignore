@@ -1,0 +1,31 @@
+﻿# Large model weights
+models/checkpoints/*
+models/loras/*
+models/embeddings/*
+
+# Generated and temporary output
+outputs/generated/*
+outputs/thumbnails/*
+outputs/tmp/*
+
+# User uploads and datasets
+data/uploads/*
+data/datasets/*
+
+# Personal app data: chats and settings
+data/chats.json
+data/chats.tmp
+config/settings.json
+config/settings.tmp
+
+# Logs and secrets
+logs/*
+.env
+.env.*
+*.log
+
+# Python / Node
+__pycache__/
+*.pyc
+.venv/
+node_modules/

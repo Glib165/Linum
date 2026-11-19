@@ -1,0 +1,16 @@
+# Бібліотеки для Linum.
+# PyTorch з підтримкою відеокарти ставиться окремою командою:
+#   pip install torch==2.14.1 torchvision==0.29.1 --index-url https://download.pytorch.org/whl/cu126
+# Решта:
+#   pip install -r requirements.txt
+
+diffusers==0.43.0
+transformers==5.23.0
+accelerate==1.16.0
+safetensors==0.8.0
+customtkinter==6.0.0
+pillow==13.0.0
+sentencepiece==0.2.3
+sacremoses==0.2.0
+peft==0.21.3
+ollama==0.6.3
