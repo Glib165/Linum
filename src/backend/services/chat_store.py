@@ -45,10 +45,23 @@ class ChatStore:
         return sorted(by_time, key=lambda chat: not chat.get("pinned"))
 
     def set_pinned(self, chat_id, pinned):
+        self.set_field(chat_id, "pinned", pinned)
+
+    def set_field(self, chat_id, key, value):
+        # Позначки чату: "pinned" (закріплений), "unread" (непрочитаний), "archived" (в архіві),
+        # "project" і "section" (назва проєкту чи розділу, або "" якщо немає)
         chat = self.get(chat_id)
-        if chat is not None:
-            chat["pinned"] = pinned
-            self.save()
+        if chat is None:
+            return
+        if value in (None, False, ""):
+            chat.pop(key, None)
+        else:
+            chat[key] = value
+        self.save()
+
+    def names(self, key):
+        # Усі назви проєктів (key="project") або розділів (key="section"), які є в чатах
+        return sorted({chat[key] for chat in self.chats if chat.get(key) and chat["messages"]}, key=str.lower)
 
     def rename(self, chat_id, title):
         chat = self.get(chat_id)

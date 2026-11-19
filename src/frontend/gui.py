@@ -172,6 +172,8 @@ class LinumApp(ctk.CTk):
         self.view = None
         self.current_chat_id = None
         self.chat_buttons = []
+        # Що показує список чатів: None (усі), ("project", назва) або ("archive",)
+        self.list_mode = None
         self.image_refs = []
         self.thumb_cache = {}
         self.card_cache = {}
@@ -324,7 +326,8 @@ class LinumApp(ctk.CTk):
         if not ico_path.exists():
             ico_path.parent.mkdir(parents=True, exist_ok=True)
             self._build_ico(ico_path)
-        self.iconbitmap(str(ico_path.resolve()))
+        self.icon_path = str(ico_path.resolve())
+        self.iconbitmap(self.icon_path)
 
     def tinted_logo(self, color, size):
         # Оригінальна іконка Linum, перефарбована в потрібний колір, на прозорому тлі
@@ -809,50 +812,119 @@ class LinumApp(ctk.CTk):
         for widget in self.chat_list.winfo_children():
             widget.destroy()
         self.chat_buttons = []
+        # Усі заголовки тепер малюються всередині списку
+        self.list_title.grid_remove()
         query = self.search_entry.get().strip().lower() if self.search_entry.winfo_ismapped() else ""
+        chats = [chat for chat in self.chats.sorted_chats() if chat["messages"]]
+        active = [chat for chat in chats if not chat.get("archived")]
+        mode = self.list_mode
+        other_rows = 0
 
-        has_pinned = any(chat.get("pinned") and chat["messages"] for chat in self.chats.chats)
-        self.list_title.configure(text="Закріплені" if has_pinned else "Нещодавні")
-        section = "pinned" if has_pinned else "recent"
-        for chat in self.chats.sorted_chats():
-            if not chat["messages"]:
-                continue
-            if query and query not in chat["title"].lower() and not any(
-                query in (message.get("prompt") or message.get("text") or "").lower()
-                or query in message.get("prompt_en", "").lower()
-                for message in chat["messages"]
-            ):
-                continue
-            # Заголовки розділів, якщо є закріплені чати
-            if not chat.get("pinned") and section == "pinned":
-                section = "recent"
+        if query:
+            # Пошук: простий список усіх чатів, крім архіву
+            for chat in active:
+                if query in chat["title"].lower() or any(
+                    query in (message.get("prompt") or message.get("text") or "").lower()
+                    or query in message.get("prompt_en", "").lower()
+                    for message in chat["messages"]
+                ):
+                    self._chat_row(chat)
+        elif mode and mode[0] == "archive":
+            self._list_back("Архів")
+            for chat in chats:
+                if chat.get("archived"):
+                    self._chat_row(chat)
+        elif mode and mode[0] == "project":
+            self._list_back(mode[1])
+            for chat in active:
+                if chat.get("project") == mode[1]:
+                    self._chat_row(chat)
+        else:
+            pinned = [chat for chat in active if chat.get("pinned")]
+            # Чати проєктів видно всередині проєкту, а не в загальному списку
+            free = [chat for chat in active if not chat.get("pinned") and not chat.get("project")]
+            if pinned:
+                self._chat_section("Закріплені")
+                for chat in pinned:
+                    self._chat_row(chat)
+            projects = sorted({chat["project"] for chat in active if chat.get("project")}, key=str.lower)
+            if projects:
+                self._chat_section("Проєкти")
+                for name in projects:
+                    self._project_row(name, sum(1 for chat in active if chat.get("project") == name))
+                    other_rows += 1
+            for section in sorted({chat["section"] for chat in free if chat.get("section")}, key=str.lower):
+                self._chat_section(section)
+                for chat in free:
+                    if chat.get("section") == section:
+                        self._chat_row(chat)
+            rest = [chat for chat in free if not chat.get("section")]
+            if rest:
                 self._chat_section("Нещодавні")
-            selected = chat["id"] == self.current_chat_id and self.view == "chat"
-            button = ctk.CTkButton(
-                self.chat_list,
-                text=shorten(chat["title"], 26),
-                anchor="w",
-                height=34,
-                corner_radius=8,
-                font=self.font(13),
-                fg_color=theme.SELECTED if selected else "transparent",
-                hover_color=theme.SURFACE_HOVER,
-                text_color=theme.TEXT,
-                command=lambda chat_id=chat["id"]: self.open_chat(chat_id),
-            )
-            button.pack(fill="x", pady=1)
-            button.bind("<Button-3>", lambda event, chat_id=chat["id"]: self._chat_menu(event, chat_id))
-            button.chat_id = chat["id"]
-            self._add_chat_dots(button)
-            self.chat_buttons.append(button)
+                for chat in rest:
+                    self._chat_row(chat)
+            archived = len(chats) - len(active)
+            if archived:
+                ctk.CTkButton(
+                    self.chat_list, text=f"Архів ({archived})", anchor="w", height=30, corner_radius=8,
+                    font=self.font(12), fg_color="transparent", hover_color=theme.SURFACE_HOVER,
+                    text_color=theme.MUTED, command=lambda: self.show_chat_list(("archive",)),
+                ).pack(fill="x", pady=(10, 0))
+                other_rows += 1
 
-        if not self.chat_buttons:
-            ctk.CTkLabel(
-                self.chat_list,
-                text="Нічого не знайдено" if query else "Тут з'являться ваші чати",
-                font=self.font(12),
-                text_color=theme.MUTED,
-            ).pack(anchor="w", padx=10, pady=6)
+        if not self.chat_buttons and not other_rows:
+            if query:
+                text = "Нічого не знайдено"
+            elif mode:
+                text = "Тут порожньо"
+            else:
+                text = "Тут з'являться ваші чати"
+            ctk.CTkLabel(self.chat_list, text=text, font=self.font(12), text_color=theme.MUTED).pack(
+                anchor="w", padx=10, pady=6
+            )
+
+    def show_chat_list(self, mode):
+        # Перемикає список: усі чати (None), один проєкт або архів
+        self.list_mode = mode
+        self.render_chat_list()
+
+    def _list_back(self, title):
+        # Рядок "‹ Назва" угорі списку проєкту чи архіву: повертає до всіх чатів
+        ctk.CTkButton(
+            self.chat_list, text=f"‹   {title}", anchor="w", height=34, corner_radius=8,
+            font=self.font(13, "bold"), fg_color="transparent", hover_color=theme.SURFACE_HOVER,
+            text_color=theme.TEXT, command=lambda: self.show_chat_list(None),
+        ).pack(fill="x", pady=(0, 6))
+
+    def _project_row(self, name, count):
+        ctk.CTkButton(
+            self.chat_list, text=f"{shorten(name, 22)}   {count}", image=self.small_icons["folder"], compound="left",
+            anchor="w", height=34, corner_radius=8, font=self.font(13), fg_color="transparent",
+            hover_color=theme.SURFACE_HOVER, text_color=theme.TEXT,
+            command=lambda: self.show_chat_list(("project", name)),
+        ).pack(fill="x", pady=1)
+
+    def _chat_row(self, chat):
+        selected = chat["id"] == self.current_chat_id and self.view == "chat"
+        unread = bool(chat.get("unread"))
+        button = ctk.CTkButton(
+            self.chat_list,
+            # Непрочитаний чат: крапка перед назвою і жирний шрифт
+            text=("•  " if unread else "") + shorten(chat["title"], 24 if unread else 26),
+            anchor="w",
+            height=34,
+            corner_radius=8,
+            font=self.font(13, "bold") if unread else self.font(13),
+            fg_color=theme.SELECTED if selected else "transparent",
+            hover_color=theme.SURFACE_HOVER,
+            text_color=theme.TEXT,
+            command=lambda chat_id=chat["id"]: self.open_chat(chat_id),
+        )
+        button.pack(fill="x", pady=1)
+        button.bind("<Button-3>", lambda event, chat_id=chat["id"]: self._chat_menu(event, chat_id))
+        button.chat_id = chat["id"]
+        self._add_chat_dots(button)
+        self.chat_buttons.append(button)
 
     def highlight_chat(self):
         # Лише перемикає підсвічування в списку чатів, без повної перебудови списку
@@ -929,18 +1001,63 @@ class LinumApp(ctk.CTk):
         chat = self.chats.get(chat_id)
         if chat is None:
             return
-        menu = tk.Menu(
-            self, tearoff=0, bd=0, relief="flat", font=(theme.FONT_FAMILY, 10),
+        style = dict(
+            tearoff=0, bd=0, relief="flat", font=(theme.FONT_FAMILY, 10),
             bg=themed(theme.SURFACE), fg=themed(theme.TEXT),
             activebackground=themed(theme.SURFACE_HOVER), activeforeground=themed(theme.TEXT),
+            selectcolor=themed(theme.TEXT),
         )
-        pinned = bool(chat.get("pinned"))
-        menu.add_command(label="  Відкріпити" if pinned else "  Закріпити",
-                         command=lambda: self.pin_chat(chat_id, not pinned))
-        menu.add_command(label="  Перейменувати", command=lambda: self.rename_chat(chat_id))
+        menu = tk.Menu(self, **style)
+
+        def item(label, command, key=None, **extra):
+            # key: літера справа в меню. Коли меню відкрите, натискання цієї літери вибирає пункт.
+            options = {"label": label, "command": command, **extra}
+            if key:
+                options["accelerator"] = key
+                if key.lower() in label.lower():
+                    options["underline"] = label.lower().index(key.lower())
+            menu.add_command(**options)
+
+        def later(func, *args):
+            # Дію запускаємо, коли меню вже закрилось
+            return lambda: self.after(1, func, *args)
+
+        archived = bool(chat.get("archived"))
+        item("Відкрити в новому вікні", later(self.open_chat_window, chat_id))
+        if chat.get("unread"):
+            item("Позначити прочитаним", later(self.set_chat_flag, chat_id, "unread", False), "Н")
+        else:
+            item("Позначити непрочитаним", later(self.set_chat_flag, chat_id, "unread", True), "Н")
         menu.add_separator()
-        menu.add_command(label="  Видалити", command=lambda: self.delete_chat(chat_id),
-                         foreground=themed(theme.DANGER), activeforeground=themed(theme.DANGER))
+        if chat.get("pinned"):
+            item("Відкріпити", later(self.set_chat_flag, chat_id, "pinned", False), "З")
+        else:
+            item("Закріпити", later(self.set_chat_flag, chat_id, "pinned", True), "З")
+        item("Перейменувати", later(self.rename_chat, chat_id), "П")
+        for key, label, new_label, remove_label in (
+            ("project", "Додати до проєкту", "Новий проєкт...", "Прибрати з проєкту"),
+            ("section", "Перемістити до розділу", "Новий розділ...", "Прибрати з розділу"),
+        ):
+            submenu = tk.Menu(menu, **style)
+            current = chat.get(key, "")
+            for name in self.chats.names(key):
+                # Позначка біля проєкту чи розділу, де чат уже лежить
+                mark = tk.BooleanVar(value=name == current)
+                submenu.add_checkbutton(label=name, variable=mark, command=later(self.set_chat_flag, chat_id, key, name))
+                submenu.marks = getattr(submenu, "marks", []) + [mark]
+            if self.chats.names(key):
+                submenu.add_separator()
+            submenu.add_command(label=new_label, command=later(self.new_chat_group, chat_id, key))
+            if current:
+                submenu.add_command(label=remove_label, command=later(self.set_chat_flag, chat_id, key, ""))
+            menu.add_cascade(label=label, menu=submenu)
+        menu.add_separator()
+        if archived:
+            item("Повернути з архіву", later(self.set_chat_flag, chat_id, "archived", False), "А")
+        else:
+            item("Архівувати", later(self.set_chat_flag, chat_id, "archived", True), "А")
+        item("Видалити", later(self.delete_chat, chat_id), "В",
+             foreground=themed(theme.DANGER), activeforeground=themed(theme.DANGER))
         if anchor is not None and anchor.winfo_ismapped():
             # Під трьома крапками
             x, y = anchor.winfo_rootx(), anchor.winfo_rooty() + anchor.winfo_height() + 2
@@ -954,8 +1071,32 @@ class LinumApp(ctk.CTk):
             menu.grab_release()
 
     def pin_chat(self, chat_id, pinned):
-        self.chats.set_pinned(chat_id, pinned)
+        self.set_chat_flag(chat_id, "pinned", pinned)
+
+    def set_chat_flag(self, chat_id, key, value):
+        # Закріпити, позначити непрочитаним, архівувати, додати до проєкту чи розділу
+        self.chats.set_field(chat_id, key, value)
         self.render_chat_list()
+
+    def new_chat_group(self, chat_id, key):
+        # Новий проєкт або розділ: питаємо назву і одразу кладемо туди чат
+        what = "проєкту" if key == "project" else "розділу"
+        dialog = ctk.CTkInputDialog(
+            title="Новий проєкт" if key == "project" else "Новий розділ", text=f"Назва {what}:",
+            fg_color=theme.BG, button_fg_color=theme.ACCENT, button_hover_color=theme.ACCENT_HOVER,
+            button_text_color=theme.ACCENT_TEXT, entry_fg_color=theme.SURFACE, entry_border_color=theme.BORDER,
+            entry_text_color=theme.TEXT, text_color=theme.TEXT,
+        )
+        name = " ".join((dialog.get_input() or "").split())[:40]
+        if name:
+            self.set_chat_flag(chat_id, key, name)
+
+    def open_chat_window(self, chat_id):
+        from src.frontend.chat_window import ChatWindow
+
+        chat = self.chats.get(chat_id)
+        if chat is not None:
+            ChatWindow(self, chat)
 
     def rename_chat(self, chat_id):
         # Назва чату на місці стає полем вводу: Enter зберігає, Esc скасовує
@@ -999,8 +1140,13 @@ class LinumApp(ctk.CTk):
             self.chats.delete_chat(previous["id"])
         self.current_chat_id = chat_id
         known = any(button.chat_id == chat_id for button in self.chat_buttons)
+        chat = self.chats.get(chat_id)
+        was_unread = bool(chat and chat.get("unread"))
+        if was_unread:
+            # Відкрили чат, отже прочитали: прибираємо крапку і жирний шрифт
+            self.chats.set_field(chat_id, "unread", False)
         self.render_chat()
-        if known and previous and previous["messages"]:
+        if known and previous and previous["messages"] and not was_unread:
             self.highlight_chat()
         else:
             self.render_chat_list()
