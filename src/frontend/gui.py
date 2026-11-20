@@ -654,10 +654,9 @@ class LinumApp(ctk.CTk):
 
         ctk.CTkLabel(tools, image=self.small_icons["palette"], text="").pack(side="left", padx=(6, 0))
         self.style_menu = ctk.CTkOptionMenu(
-            tools, values=[label(name) for name in STYLES],
-            command=lambda shown: self.settings.set("style", unlabel(shown, STYLES)), **self.menu_style()
+            tools, values=self.style_values(), command=self.style_chosen, **self.menu_style()
         )
-        self.style_menu.set(label(self.settings.get("style") if self.settings.get("style") in STYLES else "Без стилю"))
+        self.style_menu.set(label(self.settings.get("style") if self.settings.get("style") in self.styles() else "Без стилю"))
         self.style_menu.pack(side="left")
 
         ctk.CTkLabel(tools, image=self.small_icons["frame"], text="").pack(side="left", padx=(10, 0))
@@ -1725,6 +1724,59 @@ class LinumApp(ctk.CTk):
             # Коли Linum вільний, Вчитель обробляє чергу уроків
             self.after(300, self._run_lessons)
 
+    # ---------- Свої стилі ----------
+
+    def custom_styles(self):
+        # Стилі, які створив користувач: {назва: {"prompt": англійською для художника, "description": як написав}}
+        return dict(self.settings.get("custom_styles") or {})
+
+    def styles(self):
+        # Усі стилі для меню і малювання: вбудовані з config.py і свої
+        return {**STYLES, **{name: style["prompt"] for name, style in self.custom_styles().items()}}
+
+    def style_values(self):
+        # Пункти меню стилю: назви на екрані (вбудовані перекладені) і наприкінці "+ Свій стиль..."
+        return [label(name) for name in self.styles()] + [t("add_style_item")]
+
+    def style_chosen(self, shown):
+        if shown == t("add_style_item"):
+            # Це не стиль, а кнопка: повертаємо в меню попередній стиль і відкриваємо віконце
+            current = self.settings.get("style")
+            self.style_menu.set(label(current if current in self.styles() else "Без стилю"))
+            self.open_style_dialog()
+            return
+        self.settings.set("style", unlabel(shown, self.styles()))
+
+    def open_style_dialog(self, refresh_settings=False):
+        from src.frontend.style_dialog import StyleDialog
+
+        def saved(name, prompt, description):
+            styles = self.custom_styles()
+            styles[name] = {"prompt": prompt, "description": description}
+            self.settings.set("custom_styles", styles)
+            # Новий стиль одразу вибраний
+            self.settings.set("style", name)
+            self.refresh_style_menu()
+            self.set_status(t("style_saved").format(name=name))
+            if refresh_settings and self.view == "settings":
+                self.open_settings("generation")
+
+        StyleDialog(self, saved)
+
+    def delete_style(self, name):
+        styles = self.custom_styles()
+        styles.pop(name, None)
+        self.settings.set("custom_styles", styles)
+        if self.settings.get("style") == name:
+            self.settings.set("style", "Без стилю")
+        self.refresh_style_menu()
+        self.open_settings("generation")
+
+    def refresh_style_menu(self):
+        current = self.settings.get("style")
+        self.style_menu.configure(values=self.style_values())
+        self.style_menu.set(label(current if current in self.styles() else "Без стилю"))
+
     # ---------- Пам'ять про користувача ----------
 
     def remember(self, text):
@@ -2115,7 +2167,7 @@ class LinumApp(ctk.CTk):
             chat = self.chats.create_chat()
             self.current_chat_id = chat["id"]
 
-        style = style or unlabel(self.style_menu.get(), STYLES)
+        style = style or unlabel(self.style_menu.get(), self.styles())
         size = size or unlabel(self.size_menu.get(), SIZES)
         width, height = SIZES.get(size, SIZES["Квадрат 1:1"])
         if source is not None:
@@ -2142,6 +2194,7 @@ class LinumApp(ctk.CTk):
         pipe = self.pipe
         started = time.time()
         settings = self.reasoning()
+        style_text = self.styles().get(style, "")
         self._set_busy(True, generating=True)
         self.set_status(t("creating_with_model").format(model=model))
 
@@ -2181,8 +2234,8 @@ class LinumApp(ctk.CTk):
                         english, language = prompt, "en"
                 self.after(0, self._on_translated, english, language)
                 full_prompt = english
-                if STYLES.get(style):
-                    full_prompt = f"{english}, {STYLES[style]}"
+                if style_text:
+                    full_prompt = f"{english}, {style_text}"
                 negative = NEGATIVE_PROMPT if quality_boost else None
                 mask = None
                 found = None
@@ -2281,7 +2334,7 @@ class LinumApp(ctk.CTk):
                             brain.unload()
                             self.after(0, self._set_pending_title, t("redrawing"))
                             english = verdict["prompt"] or english
-                            full_prompt = f"{english}, {STYLES[style]}" if STYLES.get(style) else english
+                            full_prompt = f"{english}, {style_text}" if style_text else english
                             seed = random.randint(0, 2**31 - 1)
                             path, steps = draw(full_prompt, seed)
                             fixed_by = "redraw"
@@ -2783,11 +2836,18 @@ class LinumApp(ctk.CTk):
         model_menu = self._option(row, list(MODELS.keys()), self.selected_model or DEFAULT_MODEL, model_changed)
 
         def style_changed(shown):
-            self.settings.set("style", unlabel(shown, STYLES))
+            self.settings.set("style", unlabel(shown, self.styles()))
             self.style_menu.set(shown)
 
         row = self._setting_row(content, t("default_style"), t("default_style_hint"))
-        self._option(row, [label(name) for name in STYLES], self.style_menu.get(), style_changed)
+        self._option(row, [label(name) for name in self.styles()], self.style_menu.get(), style_changed)
+
+        # Свої стилі: кнопка "Додати стиль" і список з кнопкою "Видалити" біля кожного
+        row = self._setting_row(content, t("custom_styles"), t("custom_styles_hint"))
+        self._outline_button(row, t("add_style"), lambda: self.open_style_dialog(refresh_settings=True))
+        for name, style in self.custom_styles().items():
+            row = self._setting_row(content, name, style.get("description") or style["prompt"])
+            self._outline_button(row, t("delete"), lambda n=name: self.delete_style(n), danger=True)
 
         def size_changed(shown):
             self.settings.set("size", unlabel(shown, SIZES))
