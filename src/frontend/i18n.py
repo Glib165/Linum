@@ -9,19 +9,20 @@
 LANGUAGES = {
     "uk": "Українська",
     "en": "English",
+    "ru": "Русский",
 }
 DEFAULT_LANGUAGE = "uk"
 
 TEXTS = {
     # Бічна панель
-    "new_chat": {"uk": "Новий чат", "en": ""},
-    "search": {"uk": "Пошук", "en": ""},
+    "new_chat": {"uk": "Новий чат", "en": "New chat", "ru": "Новый чат"},
+    "search": {"uk": "Пошук", "en": "Search", "ru": "Поиск"},
     "gallery": {"uk": "Галерея", "en": ""},
-    "images_folder": {"uk": "Папка із зображеннями", "en": ""},
-    "search_placeholder": {"uk": "Шукати в чатах", "en": ""},
-    "pinned": {"uk": "Закріплені", "en": ""},
-    "projects": {"uk": "Проєкти", "en": ""},
-    "recent": {"uk": "Нещодавні", "en": ""},
+    "images_folder": {"uk": "Папка із зображеннями", "en": "Folder with images", "ru": "Папка с изображениями"},
+    "search_placeholder": {"uk": "Шукати в чатах", "en": "Search in chats", "ru": "Искать в чатах"},
+    "pinned": {"uk": "Закріплені", "en": "Pinned", "ru": "Закреплённые"},
+    "projects": {"uk": "Проєкти", "en": "Projects", "ru": "Проекты"},
+    "recent": {"uk": "Нещодавні", "en": "Recent", "ru": "Недавние"},
 
     # Поле вводу
     "prompt_placeholder": {"uk": "Напишіть повідомлення або попросіть намалювати", "en": ""},
