@@ -372,6 +372,10 @@ class LinumApp(ctk.CTk):
             self._build_ico(ico_path)
         self.icon_path = str(ico_path.resolve())
         self.iconbitmap(self.icon_path)
+        # Ім'я "Linum" замість "Python" у меню панелі завдань і при закріпленні
+        from src.frontend.taskbar import describe_window
+
+        self.after(300, lambda: describe_window(self, APP_NAME, self.icon_path))
 
     def tinted_logo(self, color, size):
         # Оригінальна іконка Linum, перефарбована в потрібний колір, на прозорому тлі
