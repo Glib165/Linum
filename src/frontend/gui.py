@@ -36,7 +36,7 @@ from src.backend.services.chat_store import ChatStore
 from src.backend.services.settings_store import SettingsStore
 from src.frontend import theme
 from src.frontend.icons import make_icon
-from src.frontend.i18n import LANGUAGES, set_language, t
+from src.frontend.i18n import LANGUAGES, greeting, set_language, t
 from src.frontend.widgets import (
     PromptBox,
     SelectableText,
@@ -95,17 +95,22 @@ def load_icon_mask(path):
     return square
 
 
+# Число, від якого залежить, яке привітання випаде. Обирається один раз при запуску:
+# поки Linum відкритий, привітання те саме, а наступного запуску буде інше.
+GREETING_SEED = random.randint(0, 2**31 - 1)
+
+
 def greeting_text(name):
     hour = datetime.now().hour
     if 5 <= hour < 12:
-        text = t("good_morning")
+        period = "morning"
     elif 12 <= hour < 18:
-        text = t("good_afternoon")
+        period = "afternoon"
     elif 18 <= hour < 23:
-        text = t("good_evening")
+        period = "evening"
     else:
-        text = t("good_night")
-    return f"{text}, {name}" if name else text
+        period = "night"
+    return greeting(period, name, random.Random(GREETING_SEED))
 
 
 def copy_image_to_clipboard(path):
