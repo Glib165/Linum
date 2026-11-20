@@ -15,6 +15,7 @@ from PIL import Image, ImageDraw
 from config.config import DEFAULT_MODEL, DEFAULT_REASONING, MODELS, REASONING
 from src.frontend import theme
 from src.frontend.icons import make_icon
+from src.frontend.i18n import label, t
 from src.frontend.widgets import themed
 
 WIDTH = 300
@@ -28,7 +29,7 @@ SCALE = 4
 ULTRA = list(REASONING.keys())[-1]
 ULTRA_TITLE = ("#7A4FD6", "#B794F6")
 ULTRA_GRADIENT = ((61, 95, 217), (123, 92, 224), (184, 128, 236))
-ULTRA_NOTE = "думає найдовше, 3-6 хв на картинку"
+ULTRA_NOTE = "ultra_note"
 
 
 def rounded_window(window):
@@ -162,10 +163,10 @@ class BrainPopup(ctk.CTkToplevel):
         index = self.level_index()
         name = self.levels[index]
         ultra = name == ULTRA
-        self.title_label.configure(text=name, text_color=ULTRA_TITLE if ultra else theme.LEVEL)
+        self.title_label.configure(text=label(name), text_color=ULTRA_TITLE if ultra else theme.LEVEL)
         model = self.app.selected_model or DEFAULT_MODEL
         if ultra:
-            self.subtitle.configure(text=f"{ULTRA_NOTE}  ·  {model}  ›")
+            self.subtitle.configure(text=f"{t(ULTRA_NOTE)}  ·  {model}  ›")
         else:
             tier = self.app.model_tiers.get(model, "")
             self.subtitle.configure(text=f"{model}  ·  {tier}  ›" if tier else f"{model}  ›")
@@ -238,15 +239,15 @@ class ModelMenu(ctk.CTkToplevel):
         body = rounded_window(self)
         self.check_icon = make_icon("check", 14, theme.TEXT)
 
-        ctk.CTkLabel(body, text="Оберіть модель", font=app.font(12), text_color=theme.MUTED, anchor="w").pack(
+        ctk.CTkLabel(body, text=t("choose_model"), font=app.font(12), text_color=theme.MUTED, anchor="w").pack(
             fill="x", padx=16, pady=(10, 2)
         )
         current = app.selected_model or DEFAULT_MODEL
         tier = app.model_tiers.get(DEFAULT_MODEL, "")
-        self._item(body, "За замовчуванням", f"Рекомендована: {DEFAULT_MODEL}, {tier}", DEFAULT_MODEL, False)
+        self._item(body, t("default"), t("recommended").format(model=DEFAULT_MODEL, tier=tier), DEFAULT_MODEL, False)
         for name in MODELS:
             available = app.model_available(name)
-            note = app.model_tiers.get(name, "") if available else "файлу моделі ще немає"
+            note = app.model_tiers.get(name, "") if available else t("no_model_file")
             self._item(body, name, note, name, name == current, enabled=available)
         ctk.CTkFrame(body, height=6, fg_color="transparent").pack()
 

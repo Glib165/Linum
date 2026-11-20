@@ -17,6 +17,7 @@ import shutil
 from pathlib import Path
 
 from src.ai import brain, lessons
+from src.frontend.i18n import t
 
 TRAINING_DIR = Path("outputs/training")
 
@@ -96,14 +97,14 @@ def run_round(pipe, model_name, settings, recent, log, on_step=None, stop=lambda
         # Художник: мозок спершу звільняє відеопам'ять
         check()
         brain.unload()
-        log("Художник малює...")
+        log(t("artist_drawing"))
         path = generate_image(pipe, prompt, model_name, on_step, NEGATIVE_PROMPT, 512, 512, random.randint(0, 2**31 - 1))
         free_gpu_memory()
         TRAINING_DIR.mkdir(parents=True, exist_ok=True)
         return str(shutil.move(str(path), TRAINING_DIR / Path(path).name))
 
     topic = random.choice(TRAINING_TOPICS)
-    log(f"Тренер придумує завдання на тему «{topic}»...")
+    log(t("trainer_inventing").format(topic=topic))
     request = invent_task(topic, recent, settings)
     if not request:
         return {"request": "", "problem": "", "fixed": None, "lesson": None}
@@ -111,7 +112,7 @@ def run_round(pipe, model_name, settings, recent, log, on_step=None, stop=lambda
     del recent[:-RECENT_LIMIT]
 
     check()
-    log(f"Завдання: {request}\nАвтор пише опис...")
+    log(t("trainer_task").format(request=request))
     decision = brain.decide([{"role": "user", "content": request}], settings)
     if decision["action"] != "image":
         return {"request": request, "problem": "", "fixed": None, "lesson": None}
@@ -119,21 +120,21 @@ def run_round(pipe, model_name, settings, recent, log, on_step=None, stop=lambda
     first_image = draw(first_prompt)
 
     check()
-    log("Критик перевіряє...")
+    log(t("critic_checking"))
     verdict = brain.review(first_image, request, first_prompt, settings)
     if verdict is None or verdict["ok"]:
         return {"request": request, "problem": "", "fixed": None, "lesson": None, "image": first_image}
 
     problem = verdict["problem"]
-    log(f"Критик знайшов проблему: {problem}\nПробуємо виправлений опис...")
+    log(t("critic_found").format(problem=problem))
     second_image = draw(verdict["prompt"])
     check()
-    log("Критик перевіряє виправлення...")
+    log(t("critic_rechecking"))
     second = brain.review(second_image, request, verdict["prompt"], settings)
     fixed = bool(second and second["ok"])
 
     check()
-    log("Вчитель записує урок...")
+    log(t("teacher_writing"))
     message = {
         "prompt": request,
         "prompt_en": verdict["prompt"],

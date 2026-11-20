@@ -36,7 +36,7 @@ from src.backend.services.chat_store import ChatStore
 from src.backend.services.settings_store import SettingsStore
 from src.frontend import theme
 from src.frontend.icons import make_icon
-from src.frontend.i18n import LANGUAGES, greeting, set_language, t
+from src.frontend.i18n import LANGUAGES, greeting, label, set_language, t, unlabel
 from src.frontend.widgets import (
     PromptBox,
     SelectableText,
@@ -46,9 +46,9 @@ from src.frontend.widgets import (
     themed,
 )
 
-THEMES = {"Світла": "light", "Темна": "dark", "Системна": "system"}
-MODEL_TIERS = {"Fornax": "швидка", "Gaia": "збалансована", "Cygnus": "найкраща"}
-LANGUAGE_NAMES = {"uk": "з української", "ru": "з російської"}
+THEMES = {"light": "theme_light", "dark": "theme_dark", "system": "theme_system"}
+MODEL_TIERS = {"Fornax": "tier_fast", "Gaia": "tier_balanced", "Cygnus": "tier_best"}
+LANGUAGE_NAMES = {"uk": "from_ukrainian", "ru": "from_russian"}
 
 # Анімація "думаю" (кільце з точок): розмір кадрів і колір точок у світлій і темній темі
 SPINNER_FRAME_SIZE = 144
@@ -172,7 +172,7 @@ class LinumApp(ctk.CTk):
         self.pipe = None
         self.loaded_model = None
         self.selected_model = None
-        self.model_tiers = MODEL_TIERS
+        self.model_tiers = {name: t(key) for name, key in MODEL_TIERS.items()}
         # busy: модель вантажиться або створює картинку, тому кнопку "створити" вимкнено.
         # generating: саме створюється картинка, тоді не можна і переходити між екранами.
         self.busy = False
@@ -253,7 +253,7 @@ class LinumApp(ctk.CTk):
         if first_model is None:
             self.update_brain_button()
             self.send_button.configure(state="disabled")
-            self.set_status("Не знайдено жодного файлу моделі. Покладіть його в models/checkpoints")
+            self.set_status(t("no_model_files"))
         else:
             self.select_model(first_model)
         # Перевірку мозку запускаємо, коли вікно вже працює. Якщо Ollama відповість раніше,
@@ -515,7 +515,7 @@ class LinumApp(ctk.CTk):
     def _update_profile(self):
         name = self.settings.get("name").strip()
         self.avatar.configure(text=(name[:1] or "L").upper())
-        self.profile_name.configure(text=name or "Профіль")
+        self.profile_name.configure(text=name or t("profile"))
 
     def toggle_sidebar(self):
         self.sidebar_visible = not self.sidebar_visible
@@ -646,16 +646,18 @@ class LinumApp(ctk.CTk):
 
         ctk.CTkLabel(tools, image=self.small_icons["palette"], text="").pack(side="left", padx=(6, 0))
         self.style_menu = ctk.CTkOptionMenu(
-            tools, values=list(STYLES.keys()), command=lambda value: self.settings.set("style", value), **self.menu_style()
+            tools, values=[label(name) for name in STYLES],
+            command=lambda shown: self.settings.set("style", unlabel(shown, STYLES)), **self.menu_style()
         )
-        self.style_menu.set(self.settings.get("style") if self.settings.get("style") in STYLES else "Без стилю")
+        self.style_menu.set(label(self.settings.get("style") if self.settings.get("style") in STYLES else "Без стилю"))
         self.style_menu.pack(side="left")
 
         ctk.CTkLabel(tools, image=self.small_icons["frame"], text="").pack(side="left", padx=(10, 0))
         self.size_menu = ctk.CTkOptionMenu(
-            tools, values=list(SIZES.keys()), command=lambda value: self.settings.set("size", value), **self.menu_style()
+            tools, values=[label(name) for name in SIZES],
+            command=lambda shown: self.settings.set("size", unlabel(shown, SIZES)), **self.menu_style()
         )
-        self.size_menu.set(self.settings.get("size") if self.settings.get("size") in SIZES else "Квадрат 1:1")
+        self.size_menu.set(label(self.settings.get("size") if self.settings.get("size") in SIZES else "Квадрат 1:1"))
         self.size_menu.pack(side="left")
 
 
@@ -696,8 +698,8 @@ class LinumApp(ctk.CTk):
 
         path = filedialog.askopenfilename(
             parent=self,
-            title="Оберіть фото",
-            filetypes=[("Зображення", "*.png *.jpg *.jpeg *.webp *.bmp *.gif"), ("Усі файли", "*.*")],
+            title=t("choose_photo"),
+            filetypes=[(t("images"), "*.png *.jpg *.jpeg *.webp *.bmp *.gif"), (t("all_files"), "*.*")],
         )
         if path:
             self.attach_image(path)
@@ -728,7 +730,7 @@ class LinumApp(ctk.CTk):
             image = source if isinstance(source, Image.Image) else Image.open(source)
             image.load()
         except Exception as error:
-            self.set_status(f"Не вдалося відкрити фото: {shorten(str(error), 100)}")
+            self.set_status(t("open_photo_failed").format(error=shorten(str(error), 100)))
             return
         if image.mode in ("RGBA", "LA", "P"):
             # Прозорі місця робимо білими, а не чорними
@@ -783,7 +785,7 @@ class LinumApp(ctk.CTk):
     @staticmethod
     def attachment_message(path, text):
         # Дані у форматі повідомлення з картинкою, щоб показати фото користувача в перегляді
-        return {"image": path, "prompt": text or "Ваше фото", "model": "Ваше фото"}
+        return {"image": path, "prompt": text or t("your_photo"), "model": t("your_photo")}
 
     def _on_main_resize(self, event):
         # Центральна колонка не ширша за CONTENT_MAX_WIDTH, як у сучасних чатів
@@ -849,7 +851,7 @@ class LinumApp(ctk.CTk):
                 ):
                     self._chat_row(chat)
         elif mode and mode[0] == "archive":
-            self._list_back("Архів")
+            self._list_back(t("archive"))
             for chat in chats:
                 if chat.get("archived"):
                     self._chat_row(chat)
@@ -885,7 +887,7 @@ class LinumApp(ctk.CTk):
             archived = len(chats) - len(active)
             if archived:
                 ctk.CTkButton(
-                    self.chat_list, text=f"Архів ({archived})", anchor="w", height=30, corner_radius=8,
+                    self.chat_list, text=f"{t('archive')} ({archived})", anchor="w", height=30, corner_radius=8,
                     font=self.font(12), fg_color="transparent", hover_color=theme.SURFACE_HOVER,
                     text_color=theme.MUTED, command=lambda: self.show_chat_list(("archive",)),
                 ).pack(fill="x", pady=(10, 0))
@@ -893,11 +895,11 @@ class LinumApp(ctk.CTk):
 
         if not self.chat_buttons and not other_rows:
             if query:
-                text = "Нічого не знайдено"
+                text = t("nothing_found")
             elif mode:
-                text = "Тут порожньо"
+                text = t("empty_here")
             else:
-                text = "Тут з'являться ваші чати"
+                text = t("chats_will_appear")
             ctk.CTkLabel(self.chat_list, text=text, font=self.font(12), text_color=theme.MUTED).pack(
                 anchor="w", padx=10, pady=6
             )
@@ -1042,20 +1044,20 @@ class LinumApp(ctk.CTk):
             return lambda: self.after(1, func, *args)
 
         archived = bool(chat.get("archived"))
-        item("Відкрити в новому вікні", later(self.open_chat_window, chat_id))
+        item(t("open_new_window"), later(self.open_chat_window, chat_id))
         if chat.get("unread"):
-            item("Позначити прочитаним", later(self.set_chat_flag, chat_id, "unread", False), "Н")
+            item(t("mark_read"), later(self.set_chat_flag, chat_id, "unread", False), t("acc_unread"))
         else:
-            item("Позначити непрочитаним", later(self.set_chat_flag, chat_id, "unread", True), "Н")
+            item(t("mark_unread"), later(self.set_chat_flag, chat_id, "unread", True), t("acc_unread"))
         menu.add_separator()
         if chat.get("pinned"):
-            item("Відкріпити", later(self.set_chat_flag, chat_id, "pinned", False), "З")
+            item(t("unpin"), later(self.set_chat_flag, chat_id, "pinned", False), t("acc_pin"))
         else:
-            item("Закріпити", later(self.set_chat_flag, chat_id, "pinned", True), "З")
-        item("Перейменувати", later(self.rename_chat, chat_id), "П")
+            item(t("pin"), later(self.set_chat_flag, chat_id, "pinned", True), t("acc_pin"))
+        item(t("rename"), later(self.rename_chat, chat_id), t("acc_rename"))
         for key, label, new_label, remove_label in (
-            ("project", "Додати до проєкту", "Новий проєкт...", "Прибрати з проєкту"),
-            ("section", "Перемістити до розділу", "Новий розділ...", "Прибрати з розділу"),
+            ("project", t("add_to_project"), t("new_project_dots"), t("remove_from_project")),
+            ("section", t("move_to_section"), t("new_section_dots"), t("remove_from_section")),
         ):
             submenu = tk.Menu(menu, **style)
             current = chat.get(key, "")
@@ -1072,10 +1074,10 @@ class LinumApp(ctk.CTk):
             menu.add_cascade(label=label, menu=submenu)
         menu.add_separator()
         if archived:
-            item("Повернути з архіву", later(self.set_chat_flag, chat_id, "archived", False), "А")
+            item(t("unarchive"), later(self.set_chat_flag, chat_id, "archived", False), t("acc_archive"))
         else:
-            item("Архівувати", later(self.set_chat_flag, chat_id, "archived", True), "А")
-        item("Видалити", later(self.delete_chat, chat_id), "В",
+            item(t("archive_action"), later(self.set_chat_flag, chat_id, "archived", True), t("acc_archive"))
+        item(t("delete"), later(self.delete_chat, chat_id), t("acc_delete"),
              foreground=themed(theme.DANGER), activeforeground=themed(theme.DANGER))
         if anchor is not None and anchor.winfo_ismapped():
             # Під трьома крапками
@@ -1099,9 +1101,9 @@ class LinumApp(ctk.CTk):
 
     def new_chat_group(self, chat_id, key):
         # Новий проєкт або розділ: питаємо назву і одразу кладемо туди чат
-        what = "проєкту" if key == "project" else "розділу"
         dialog = ctk.CTkInputDialog(
-            title="Новий проєкт" if key == "project" else "Новий розділ", text=f"Назва {what}:",
+            title=t("new_project") if key == "project" else t("new_section"),
+            text=t("project_name") if key == "project" else t("section_name"),
             fg_color=theme.BG, button_fg_color=theme.ACCENT, button_hover_color=theme.ACCENT_HOVER,
             button_text_color=theme.ACCENT_TEXT, entry_fg_color=theme.SURFACE, entry_border_color=theme.BORDER,
             entry_text_color=theme.TEXT, text_color=theme.TEXT,
@@ -1189,8 +1191,8 @@ class LinumApp(ctk.CTk):
         if chat is None or not chat["messages"]:
             return
         confirmed = messagebox.askyesno(
-            "Видалити чат",
-            f"Видалити чат «{chat['title']}»?\nЗображення залишаться в папці outputs.",
+            t("delete_chat"),
+            t("delete_chat_question").format(title=chat["title"]),
             parent=self,
         )
         if not confirmed:
@@ -1265,10 +1267,10 @@ class LinumApp(ctk.CTk):
 
         head = ctk.CTkFrame(self.recents, fg_color="transparent")
         head.pack(fill="x", pady=(0, 10))
-        ctk.CTkLabel(head, text="Останні зображення", font=self.font(13), text_color=theme.MUTED).pack(side="left", padx=(4, 0))
+        ctk.CTkLabel(head, text=t("recent_images"), font=self.font(13), text_color=theme.MUTED).pack(side="left", padx=(4, 0))
         ctk.CTkButton(
             head,
-            text="Усі",
+            text=t("all"),
             width=0,
             height=26,
             corner_radius=8,
@@ -1314,7 +1316,7 @@ class LinumApp(ctk.CTk):
             self.current_chat_id = None
         self._set_view("gallery")
         items = self.all_images()
-        self.header_title.configure(text=f"Галерея  ·  {len(items)}")
+        self.header_title.configure(text=f"{t('gallery')}  ·  {len(items)}")
         self.delete_button.grid_remove()
         self.render_chat_list()
 
@@ -1322,7 +1324,7 @@ class LinumApp(ctk.CTk):
             widget.destroy()
         if not items:
             ctk.CTkLabel(
-                self.gallery, text="Тут з'являться створені зображення", font=self.font(14), text_color=theme.MUTED
+                self.gallery, text=t("images_will_appear"), font=self.font(14), text_color=theme.MUTED
             ).pack(pady=120)
             return
 
@@ -1388,7 +1390,10 @@ class LinumApp(ctk.CTk):
         if has_translation:
             SelectableText(
                 bubble,
-                f"Переклад {LANGUAGE_NAMES.get(message['language'], '')}: {message['prompt_en']}",
+                t("translation_line").format(
+                    source=t(LANGUAGE_NAMES[message["language"]]) if message.get("language") in LANGUAGE_NAMES else "",
+                    text=message["prompt_en"],
+                ),
                 self.font(12),
                 max_width=500,
                 text_color=theme.MUTED,
@@ -1459,7 +1464,7 @@ class LinumApp(ctk.CTk):
     def _add_thinking(self):
         row = self._assistant_row()
         self.spinner_label(row, 30).pack(side="left", padx=(0, 10))
-        label = ctk.CTkLabel(row, text="Думаю...", font=self.font(14), text_color=theme.MUTED)
+        label = ctk.CTkLabel(row, text=t("thinking"), font=self.font(14), text_color=theme.MUTED)
         label.pack(side="left", pady=(1, 0))
         self.thinking = {"row": row, "label": label, "started": time.time()}
         self._tick_thinking()
@@ -1470,7 +1475,7 @@ class LinumApp(ctk.CTk):
             return
         seconds = int(time.time() - self.thinking["started"])
         if seconds >= 12:
-            self.thinking["label"].configure(text=f"Прокидаюся... {seconds} с (перша відповідь довша)")
+            self.thinking["label"].configure(text=t("waking_up").format(seconds=seconds))
         self.after(1000, self._tick_thinking)
 
     def _remove_thinking(self):
@@ -1491,7 +1496,7 @@ class LinumApp(ctk.CTk):
             picture_label.bind("<Button-1>", lambda event, m=message: self.open_viewer(m))
         else:
             ctk.CTkLabel(
-                card, text="Файл зображення не знайдено", width=IMAGE_SIZE, height=120,
+                card, text=t("image_missing"), width=IMAGE_SIZE, height=120,
                 font=self.font(13), text_color=theme.MUTED,
             ).pack(padx=8, pady=8)
 
@@ -1505,26 +1510,26 @@ class LinumApp(ctk.CTk):
         if message.get("review"):
             # Gaia перевірила перший варіант, знайшла проблему і перемалювала
             SelectableText(
-                card, f"Перевірка: {message['review']} Перемальовано.", self.font(12),
+                card, t("review_redrawn").format(problem=message["review"]), self.font(12),
                 max_width=IMAGE_SIZE - 10, text_color=theme.MUTED, bg=theme.SURFACE,
             ).pack(anchor="w", padx=14, pady=(2, 2))
 
         details = [message["model"]]
         if message.get("checked") and not message.get("review"):
-            details.append("Перевірено")
+            details.append(t("checked"))
         if message.get("recolored"):
-            details.append(f"Перефарбовано: {message['target']}" if message.get("target") else "Перефарбовано")
+            details.append(t("recolored_target").format(target=message["target"]) if message.get("target") else t("recolored"))
         elif message.get("target") and message.get("target_found"):
-            details.append(f"{'Прибрано' if message.get('remove') else 'Змінено'}: {message['target']}")
+            details.append(t("removed_target" if message.get("remove") else "changed_target").format(target=message["target"]))
         elif message.get("target"):
-            details.append(f"Не знайдено «{message['target']}», змінено все фото")
+            details.append(t("target_not_found").format(target=message["target"]))
         elif message.get("source"):
-            details.append("Зміна фото")
+            details.append(t("photo_edit"))
         if message.get("style") and message["style"] != "Без стилю":
-            details.append(message["style"])
+            details.append(label(message["style"]))
         if message["steps"]:
-            details.append(f"{message['steps']} кроків")
-        details += [f"{message.get('seconds', 0)} с", datetime.fromisoformat(message["created"]).strftime("%H:%M")]
+            details.append(t("steps_count").format(steps=message["steps"]))
+        details += [t("seconds_short").format(seconds=message.get("seconds", 0)), datetime.fromisoformat(message["created"]).strftime("%H:%M")]
         info = ctk.CTkFrame(card, fg_color="transparent")
         info.pack(fill="x", padx=(14, 8), pady=(2, 0))
         ctk.CTkLabel(
@@ -1561,7 +1566,7 @@ class LinumApp(ctk.CTk):
         inner = ctk.CTkFrame(box, fg_color="transparent")
         inner.place(relx=0.5, rely=0.5, anchor="center")
         self.spinner_label(inner, 64).pack(pady=(0, 14))
-        title = ctk.CTkLabel(inner, text="Готую запит", font=self.font(15), text_color=theme.TEXT)
+        title = ctk.CTkLabel(inner, text=t("preparing"), font=self.font(15), text_color=theme.TEXT)
         title.pack()
         bar = ctk.CTkProgressBar(
             inner, width=min(240, box_width - 60), height=3, corner_radius=2,
@@ -1579,7 +1584,7 @@ class LinumApp(ctk.CTk):
     def copy_prompt(self, message):
         self.clipboard_clear()
         self.clipboard_append(message["prompt"])
-        self.set_status("Запит скопійовано")
+        self.set_status(t("prompt_copied"))
 
     def variation(self, message):
         # Той самий запит, стиль і формат, але новий seed, тобто нова картинка
@@ -1618,7 +1623,7 @@ class LinumApp(ctk.CTk):
         if self.busy:
             return
         if not self.model_available(name):
-            self.set_status(f"Модель {name} ще не додана. Покладіть файл сюди: {MODELS[name]['path']}")
+            self.set_status(t("model_missing").format(name=name, path=MODELS[name]["path"]))
             return
         self.selected_model = name
         self.update_brain_button()
@@ -1631,7 +1636,7 @@ class LinumApp(ctk.CTk):
         self.pipe = None
         self.loaded_model = None
         self._set_busy(True)
-        self.set_status(f"Завантажую модель {name}...")
+        self.set_status(t("loading_model").format(name=name))
 
         def work():
             nonlocal old_pipe
@@ -1664,7 +1669,7 @@ class LinumApp(ctk.CTk):
 
     def _on_model_failed(self, name, error):
         self._set_busy(False)
-        self.set_status(f"Не вдалося завантажити модель {name}: {shorten(str(error), 140)}")
+        self.set_status(t("model_load_failed").format(name=name, error=shorten(str(error), 140)))
 
     def _preload_translator(self):
         # Український перекладач готуємо заздалегідь, щоб перший запит не чекав
@@ -1710,7 +1715,7 @@ class LinumApp(ctk.CTk):
         self.chats.save()
         for (name, button), rated in zip(buttons.items(), (1, -1)):
             button.configure(image=self.rating_icons[(name, message.get("rating") == rated)])
-        self.set_status("Дякую! Linum зробить з цього урок." if message.get("rating") else "Оцінку знято")
+        self.set_status(t("thanks_lesson") if message.get("rating") else t("rating_removed"))
 
     def queue_lesson(self, message, liked):
         # liked: True/False - оцінка користувача; None - помилку знайшов Критик під час перевірки
@@ -1746,23 +1751,23 @@ class LinumApp(ctk.CTk):
     def _on_lesson(self, lesson):
         self.learning = False
         if lesson is not None and not self.busy:
-            self.set_status(f"Linum запам'ятав: {shorten(lesson['text'], 140)}")
+            self.set_status(t("lesson_learned").format(text=shorten(lesson["text"], 140)))
         self._run_lessons()
 
     def toggle_training(self):
         if self.training:
             # Зупиняємо між кроками: поточний крок агентів доробиться
             self.training_stop = True
-            self._set_training_status("Зупиняю після поточного кроку...")
+            self._set_training_status(t("stopping"))
             return
         if self.busy or self.pipe is None or not self.brain_ready:
-            self._set_training_status("Зачекайте: художник або мозок ще не готові, чи Linum зараз зайнятий.")
+            self._set_training_status(t("training_not_ready"))
             return
         self.training = True
         self.training_stop = False
         self._set_busy(True)
         if self.training_button is not None and self.training_button.winfo_exists():
-            self.training_button.configure(text="Зупинити")
+            self.training_button.configure(text=t("stop"))
         pipe, model, settings = self.pipe, self.loaded_model, self.reasoning()
 
         def log(text):
@@ -1781,16 +1786,16 @@ class LinumApp(ctk.CTk):
                 except trainer.Stopped:
                     break
                 except Exception as error:
-                    log(f"Помилка в раунді: {shorten(str(error), 160)}")
+                    log(t("round_error").format(error=shorten(str(error), 160)))
                     break
                 rounds += 1
                 if result.get("lesson"):
                     learned += 1
-                    log(f"Раунд {rounds}. Новий урок: {result['lesson']['text']}")
+                    log(t("round_lesson").format(round=rounds, text=result["lesson"]["text"]))
                 elif result.get("request") and not result.get("problem"):
-                    log(f"Раунд {rounds}. Критик не знайшов помилок у завданні: {result['request']}")
+                    log(t("round_ok").format(round=rounds, request=result["request"]))
                 else:
-                    log(f"Раунд {rounds} без нового уроку.")
+                    log(t("round_nothing").format(round=rounds))
             self.after(0, self._on_training_done, rounds, learned)
 
         threading.Thread(target=work, daemon=True).start()
@@ -1804,7 +1809,7 @@ class LinumApp(ctk.CTk):
     def _on_training_done(self, rounds, learned):
         self.training = False
         self._set_busy(False)
-        self._set_training_status(f"Тренування завершено: раундів {rounds}, нових уроків {learned}.")
+        self._set_training_status(t("training_done").format(rounds=rounds, learned=learned))
         if self.view == "settings":
             # Оновлюємо сторінку, щоб з'явились нові уроки
             self.open_settings("experience")
@@ -1812,10 +1817,10 @@ class LinumApp(ctk.CTk):
     def on_generate(self, event=None):
         prompt = self.prompt_entry.get().strip()
         if not prompt and self.attachment is None:
-            self.set_status("Спершу напишіть повідомлення")
+            self.set_status(t("write_first"))
             return
         if self.attachment is not None and not self.brain_ready:
-            self.set_status("Щоб працювати з фото, потрібна Gaia. Запустіть Ollama.")
+            self.set_status(t("photo_needs_gaia"))
             return
         started = self.send_message(prompt) if self.brain_ready else self.start_generation(prompt)
         if started:
@@ -1835,7 +1840,7 @@ class LinumApp(ctk.CTk):
         # Текст кнопки в полі вводу: художня модель і рівень міркувань
         level = self.settings.get("reasoning")
         level = level if level in REASONING else DEFAULT_REASONING
-        self.brain_button.configure(text=f"{self.selected_model or DEFAULT_MODEL}  ·  {level}")
+        self.brain_button.configure(text=f"{self.selected_model or DEFAULT_MODEL}  ·  {label(level)}")
 
     def toggle_brain_popup(self):
         from src.frontend.brain_popup import BrainPopup
@@ -1874,7 +1879,7 @@ class LinumApp(ctk.CTk):
     def _on_brain_checked(self, ready):
         self.brain_ready = ready
         if not ready and not self.busy:
-            self.set_status("Мозок Linum недоступний (запустіть Ollama). Поки що лише малюю за описом.")
+            self.set_status(t("brain_unavailable"))
 
     def send_message(self, text):
         # Повідомлення йде до мозку, а він вирішує: відповісти, намалювати чи змінити фото
@@ -1909,7 +1914,7 @@ class LinumApp(ctk.CTk):
         self._scroll_to_bottom()
         self._set_busy(True, generating=True)
         settings = self.reasoning()
-        self.set_status("Linum міркує, це може зайняти хвилину-дві..." if settings["think"] else "Linum думає...")
+        self.set_status(t("linum_reasoning") if settings["think"] else t("linum_thinking"))
         history_messages = list(chat["messages"])
 
         def work():
@@ -1933,14 +1938,14 @@ class LinumApp(ctk.CTk):
         self.set_status()
         message = str(error)
         if "out of memory" in message.lower() or "terminated" in message.lower():
-            reason = "не вистачило пам'яті, щоб завантажитися"
+            reason = t("reason_memory")
         elif "connect" in message.lower() or "refused" in message.lower():
-            reason = "Ollama не запущена"
+            reason = t("reason_ollama")
         else:
             reason = shorten(message, 120)
         row = self._assistant_row()
         ctk.CTkLabel(
-            row, text=f"Gaia не змогла відповісти: {reason}.", font=self.font(14), text_color=theme.DANGER,
+            row, text=t("gaia_failed").format(reason=reason), font=self.font(14), text_color=theme.DANGER,
         ).pack(side="left")
 
         def retry():
@@ -1949,7 +1954,7 @@ class LinumApp(ctk.CTk):
             row.destroy()
             self._ask_brain(chat_id, text)
 
-        self.small_button(row, "Повторити", self.small_icons["refresh"], retry).pack(side="left", padx=(10, 0))
+        self.small_button(row, t("retry"), self.small_icons["refresh"], retry).pack(side="left", padx=(10, 0))
         self._scroll_to_bottom()
 
     def _on_decided(self, chat_id, text, decision):
@@ -1969,7 +1974,7 @@ class LinumApp(ctk.CTk):
         if decision["action"] == "edit":
             source = self.last_image(chat_id)
         if self.pipe is None:
-            self.set_status("Художня модель ще завантажується. Повторіть прохання за хвилину.")
+            self.set_status(t("artist_loading"))
             return
         self.start_generation(
             text,
@@ -2016,8 +2021,8 @@ class LinumApp(ctk.CTk):
             chat = self.chats.create_chat()
             self.current_chat_id = chat["id"]
 
-        style = style or self.style_menu.get()
-        size = size or self.size_menu.get()
+        style = style or unlabel(self.style_menu.get(), STYLES)
+        size = size or unlabel(self.size_menu.get(), SIZES)
         width, height = SIZES.get(size, SIZES["Квадрат 1:1"])
         if source is not None:
             with Image.open(source) as original:
@@ -2044,7 +2049,7 @@ class LinumApp(ctk.CTk):
         started = time.time()
         settings = self.reasoning()
         self._set_busy(True, generating=True)
-        self.set_status(f"Створюю зображення моделлю {model}...")
+        self.set_status(t("creating_with_model").format(model=model))
 
         def on_step(step, total):
             self.after(0, self._update_progress, step, total)
@@ -2063,7 +2068,7 @@ class LinumApp(ctk.CTk):
 
                     if source is not None and targets and box is None:
                         # Поки Gaia ще в пам'яті, просимо її показати рамкою, де предмет
-                        self.after(0, self._set_pending_title, f"Шукаю: {targets[0]}")
+                        self.after(0, self._set_pending_title, t("searching_for").format(target=targets[0]))
                         box = brain.locate(source, targets[0], where, model=settings["model"])
                     # Мозок і художник разом не вміщаються в пам'ять, тому мозок на час малювання вивантажуємо
                     brain.unload()
@@ -2082,7 +2087,7 @@ class LinumApp(ctk.CTk):
                 edit_strength = strength
                 if source is not None and targets:
                     # Шукаємо предмет на фото, щоб перемалювати лише його
-                    self.after(0, self._set_pending_title, f"Шукаю: {targets[0]}")
+                    self.after(0, self._set_pending_title, t("searching_for").format(target=targets[0]))
                     from src.ai.segmenter import find_mask
 
                     mask, found = find_mask(source, targets, where=where, remove=remove, box=box)
@@ -2093,7 +2098,7 @@ class LinumApp(ctk.CTk):
                         if area > 0.33:
                             mask, found = None, None
                     if mask is not None:
-                        self.after(0, self._set_pending_title, "Прибираю" if remove else "Змінюю зображення")
+                        self.after(0, self._set_pending_title, t("removing") if remove else t("editing_image"))
                         if remove:
                             # Прибираємо: художник не повинен намалювати цей предмет знову
                             negative = ", ".join(targets) + ", " + (negative or "")
@@ -2119,7 +2124,7 @@ class LinumApp(ctk.CTk):
                         # "Ще варіант": кожен новий колір трохи інший відтінок (залежить від seed)
                         colors = [{**change, "to": vary_color(change["to"], seed + index)}
                                   for index, change in enumerate(colors)]
-                    self.after(0, self._set_pending_title, "Перефарбовую")
+                    self.after(0, self._set_pending_title, t("recoloring"))
                     with Image.open(source) as original:
                         whole = Image.new("L", original.size, 255)
                         path = save_image(recolor(original, mask if mask is not None else whole, colors, exact=vary))
@@ -2133,14 +2138,14 @@ class LinumApp(ctk.CTk):
                     from src.ai import brain
 
                     free_gpu_memory()
-                    self.after(0, self._set_pending_title, "Перевіряю результат")
+                    self.after(0, self._set_pending_title, t("checking_result"))
                     verdict = brain.review(path, prompt, english, settings)
                     if verdict is not None and not verdict["ok"]:
                         review = verdict["problem"]
                         first_image = path
                         first_prompt = english
                         brain.unload()
-                        self.after(0, self._set_pending_title, "Перемальовую")
+                        self.after(0, self._set_pending_title, t("redrawing"))
                         english = verdict["prompt"]
                         full_prompt = f"{english}, {STYLES[style]}" if STYLES.get(style) else english
                         seed = random.randint(0, 2**31 - 1)
@@ -2192,9 +2197,9 @@ class LinumApp(ctk.CTk):
     def _on_translated(self, english, language):
         if self.pending is None:
             return
-        self.pending["title"].configure(text="Змінюю зображення" if self.pending.get("edit") else "Створюю зображення")
+        self.pending["title"].configure(text=t("editing_image") if self.pending.get("edit") else t("creating_image"))
         if language != "en":
-            self.pending["steps"].configure(text=shorten(f"Переклад: {english}", 54))
+            self.pending["steps"].configure(text=shorten(t("translation_short").format(text=english), 54))
 
     def _set_pending_title(self, text):
         if self.pending is not None:
@@ -2204,14 +2209,14 @@ class LinumApp(ctk.CTk):
         if self.pending is None:
             return
         self.pending["bar"].set(step / total)
-        self.pending["steps"].configure(text=f"Крок {step} з {total}")
+        self.pending["steps"].configure(text=t("step_of").format(step=step, total=total))
 
     def _on_generated(self, chat_id, message):
         self.chats.add_message(chat_id, message)
         self._set_busy(False)
         self.render_chat(fade="last")
         self.render_chat_list()
-        self.set_status(f"Готово за {message['seconds']} с")
+        self.set_status(t("done_in").format(seconds=message["seconds"]))
         self.prompt_entry.focus_set()
         if message.get("review"):
             # Критик знайшов помилку: Вчитель зробить з неї урок, щоб Автор її більше не повторював
@@ -2221,7 +2226,7 @@ class LinumApp(ctk.CTk):
         self._set_busy(False)
         self.render_chat(fade=None)
         self.render_chat_list()
-        self.set_status(f"Не вдалося створити зображення: {shorten(str(error), 140)}")
+        self.set_status(t("create_failed").format(error=shorten(str(error), 140)))
 
     # ---------- Меню акаунта ----------
 
@@ -2234,7 +2239,7 @@ class LinumApp(ctk.CTk):
         if self.account_menu is not None:
             self.close_account_menu()
             return
-        name = self.settings.get("name").strip() or "Профіль"
+        name = self.settings.get("name").strip() or t("profile")
         menu = ctk.CTkFrame(
             self, width=250, fg_color=theme.SURFACE, corner_radius=12, border_width=1, border_color=theme.BORDER
         )
@@ -2249,10 +2254,10 @@ class LinumApp(ctk.CTk):
 
         is_dark = ctk.get_appearance_mode() == "Dark"
         items = (
-            ("Налаштування", "settings", lambda: self.open_settings("general")),
-            ("Світла тема" if is_dark else "Темна тема", "palette", self.quick_toggle_theme),
+            (t("settings"), "settings", lambda: self.open_settings("general")),
+            (t("light_theme") if is_dark else t("dark_theme"), "palette", self.quick_toggle_theme),
             (t("images_folder"), "folder", lambda: open_folder(OUTPUTS_DIR)),
-            ("Про Linum", "model", lambda: self.open_settings("about")),
+            (t("about"), "model", lambda: self.open_settings("about")),
         )
         box = ctk.CTkFrame(menu, fg_color="transparent")
         box.pack(fill="x", padx=6, pady=6)
@@ -2346,13 +2351,13 @@ class LinumApp(ctk.CTk):
             button.pack(side="right", padx=(6, 0))
             return button
 
-        viewer_button("Закрити", self.later(self.close_viewer))
+        viewer_button(t("close"), self.later(self.close_viewer))
         viewer_button(t("in_folder"), lambda: self.show_in_folder(path))
-        copy_button = viewer_button("Копіювати", lambda: self.copy_image(path, copy_button))
+        copy_button = viewer_button(t("copy"), lambda: self.copy_image(path, copy_button))
         self.viewer_copy = lambda: self.copy_image(path, copy_button)
         viewer_button(t("open"), lambda: os.startfile(path.resolve()))
         if chat_id is not None:
-            viewer_button("Перейти до чату", self.later(lambda: (self.close_viewer(), self.open_chat(chat_id))))
+            viewer_button(t("go_to_chat"), self.later(lambda: (self.close_viewer(), self.open_chat(chat_id))))
 
         # Картинка займає весь вільний простір вікна, зберігаючи пропорції
         scaling = ctk.ScalingTracker.get_widget_scaling(self)
@@ -2368,7 +2373,7 @@ class LinumApp(ctk.CTk):
 
         details = [message["model"]]
         if message.get("style") and message["style"] != "Без стилю":
-            details.append(message["style"])
+            details.append(label(message["style"]))
         details.append(f"{source.width}×{source.height}")
         if message.get("seed") is not None:
             details.append(f"seed {message['seed']}")
@@ -2382,12 +2387,12 @@ class LinumApp(ctk.CTk):
     def copy_image(self, path, button=None):
         try:
             copy_image_to_clipboard(path)
-            text = "Скопійовано"
+            text = t("copied")
         except Exception:
-            text = "Не вдалося"
+            text = t("failed")
         if button is not None:
             button.configure(text=text)
-            self.after(1500, lambda: button.winfo_exists() and button.configure(text="Копіювати"))
+            self.after(1500, lambda: button.winfo_exists() and button.configure(text=t("copy")))
 
     def _on_copy_key(self, event):
         # Ctrl+C копіює фото лише коли відкритий перегляд
@@ -2404,7 +2409,7 @@ class LinumApp(ctk.CTk):
 
     def open_settings(self, section="general"):
         if self.generating:
-            self.set_status("Зачекайте, поки створиться зображення")
+            self.set_status(t("wait_image"))
             return
         previous = self.chats.get(self.current_chat_id)
         if previous and not previous["messages"]:
@@ -2422,7 +2427,7 @@ class LinumApp(ctk.CTk):
         container = ctk.CTkFrame(page, fg_color="transparent")
         container.pack(fill="y", expand=True, pady=(16, 20))
         ctk.CTkLabel(
-            container, text="Налаштування", font=self.font(30, family="Georgia"), text_color=theme.TEXT, anchor="w"
+            container, text=t("settings"), font=self.font(30, family="Georgia"), text_color=theme.TEXT, anchor="w"
         ).pack(anchor="w", pady=(0, 24))
 
         body = ctk.CTkFrame(container, fg_color="transparent")
@@ -2439,12 +2444,12 @@ class LinumApp(ctk.CTk):
         content.pack(side="left", fill="y", padx=(32, 0))
 
         for key, title in (
-            ("general", "Загальні"),
-            ("appearance", "Вигляд"),
-            ("generation", "Генерація"),
-            ("experience", "Досвід"),
-            ("storage", "Сховище"),
-            ("about", "Про Linum"),
+            ("general", t("general")),
+            ("appearance", t("appearance")),
+            ("generation", t("generation")),
+            ("experience", t("experience")),
+            ("storage", t("storage")),
+            ("about", t("about")),
         ):
             ctk.CTkButton(
                 nav,
@@ -2534,9 +2539,9 @@ class LinumApp(ctk.CTk):
         return menu
 
     def _settings_general(self, content):
-        self._settings_title(content, "Загальні")
+        self._settings_title(content, t("general"))
 
-        row = self._setting_row(content, "Ваше ім'я", "Так Linum звертатиметься до вас на головному екрані")
+        row = self._setting_row(content, t("your_name"), t("your_name_hint"))
         name_entry = ctk.CTkEntry(
             row,
             width=220,
@@ -2546,7 +2551,7 @@ class LinumApp(ctk.CTk):
             border_color=theme.BORDER,
             fg_color=theme.SURFACE,
             text_color=theme.TEXT,
-            placeholder_text="Ім'я",
+            placeholder_text=t("name_placeholder"),
             placeholder_text_color=theme.MUTED,
             font=self.font(13),
         )
@@ -2557,8 +2562,8 @@ class LinumApp(ctk.CTk):
 
         row = self._setting_row(
             content,
-            "Перекладати запити",
-            "Українські й російські запити перекладаються англійською, бо модель розуміє лише її",
+            t("translate_prompts"),
+            t("translate_hint"),
         )
         self._switch(row, "translate")
 
@@ -2581,39 +2586,41 @@ class LinumApp(ctk.CTk):
             self.destroy()
 
     def _settings_appearance(self, content):
-        self._settings_title(content, "Вигляд")
+        self._settings_title(content, t("appearance"))
 
-        row = self._setting_row(content, "Тема", "Системна тема підлаштовується під налаштування Windows")
-        names = {mode: label for label, mode in THEMES.items()}
+        row = self._setting_row(content, t("theme"), t("theme_hint"))
+        names = {mode: t(key) for mode, key in THEMES.items()}
         selector = ctk.CTkSegmentedButton(
-            row, values=list(THEMES.keys()), command=lambda label: self.set_theme(THEMES[label]), **self.segmented_style()
+            row, values=list(names.values()),
+            command=lambda shown: self.set_theme(next(mode for mode, name in names.items() if name == shown)),
+            **self.segmented_style(),
         )
-        selector.set(names.get(self.settings.get("theme"), "Системна"))
+        selector.set(names.get(self.settings.get("theme"), names["system"]))
         selector.grid(row=0, column=1, sticky="e")
 
         def sidebar_changed(value):
             self.sidebar_visible = value
             self._apply_sidebar()
 
-        row = self._setting_row(content, "Бокова панель", "Показувати список чатів зліва")
+        row = self._setting_row(content, t("sidebar"), t("sidebar_hint"))
         self._switch(row, "sidebar", sidebar_changed)
 
     def _settings_generation(self, content):
-        self._settings_title(content, "Генерація")
+        self._settings_title(content, t("generation"))
 
         row = self._setting_row(
             content,
-            "Рівень міркувань",
-            "Низький найшвидший. Високий і Ультра думають перед відповіддю. "
-            "Середній і Ультра перевіряють готову картинку",
+            t("reasoning_level"),
+            t("reasoning_hint"),
         )
         selector = ctk.CTkSegmentedButton(
-            row, values=list(REASONING.keys()), command=self.set_reasoning, **self.segmented_style()
+            row, values=[label(name) for name in REASONING],
+            command=lambda shown: self.set_reasoning(unlabel(shown, REASONING)), **self.segmented_style()
         )
-        selector.set(self.settings.get("reasoning"))
+        selector.set(label(self.settings.get("reasoning")))
         selector.grid(row=0, column=1, sticky="e")
 
-        row = self._setting_row(content, "Модель", "Fornax швидка, Gaia збалансована, Cygnus найкраща")
+        row = self._setting_row(content, t("model"), t("model_hint"))
         model_menu = None
 
         def model_changed(value):
@@ -2622,50 +2629,47 @@ class LinumApp(ctk.CTk):
 
         model_menu = self._option(row, list(MODELS.keys()), self.selected_model or DEFAULT_MODEL, model_changed)
 
-        def style_changed(value):
-            self.settings.set("style", value)
-            self.style_menu.set(value)
+        def style_changed(shown):
+            self.settings.set("style", unlabel(shown, STYLES))
+            self.style_menu.set(shown)
 
-        row = self._setting_row(content, "Стиль за замовчуванням", "Стиль, з яким відкривається новий чат")
-        self._option(row, list(STYLES.keys()), self.style_menu.get(), style_changed)
+        row = self._setting_row(content, t("default_style"), t("default_style_hint"))
+        self._option(row, [label(name) for name in STYLES], self.style_menu.get(), style_changed)
 
-        def size_changed(value):
-            self.settings.set("size", value)
-            self.size_menu.set(value)
+        def size_changed(shown):
+            self.settings.set("size", unlabel(shown, SIZES))
+            self.size_menu.set(shown)
 
-        row = self._setting_row(content, "Формат за замовчуванням", "Портрет і альбом створюються довше за квадрат")
-        self._option(row, list(SIZES.keys()), self.size_menu.get(), size_changed)
+        row = self._setting_row(content, t("default_size"), t("default_size_hint"))
+        self._option(row, [label(name) for name in SIZES], self.size_menu.get(), size_changed)
 
         row = self._setting_row(
             content,
-            "Покращення якості",
-            "Просить модель уникати розмитості, зайвих пальців і деформацій",
+            t("quality_boost"),
+            t("quality_boost_hint"),
         )
         self._switch(row, "quality_boost")
 
         steps = ", ".join(f"{name} {info['steps']}" for name, info in MODELS.items())
-        self._setting_row(content, "Кроки генерації", f"{steps}. Змінюються у файлі config/config.py")
+        self._setting_row(content, t("generation_steps"), t("steps_hint").format(steps=steps))
 
     def _settings_experience(self, content):
         # Зошит уроків: чого Linum навчився з власних помилок і ваших оцінок
         from src.ai import lessons
 
-        self._settings_title(content, "Досвід")
+        self._settings_title(content, t("experience"))
         ctk.CTkLabel(
             content,
-            text="Уроки, які Linum зробив зі своїх помилок і ваших оцінок. Gaia читає їх перед кожною картинкою. "
-                 "Якщо урок хибний, видаліть його.",
+            text=t("experience_intro"),
             font=self.font(12), text_color=theme.MUTED, anchor="w", justify="left", wraplength=560,
         ).pack(fill="x", pady=(0, 18))
 
         # Тренування: агенти самі придумують завдання, малюють, перевіряють і записують уроки
         row = self._setting_row(
-            content, "Тренування",
-            "Агенти самі придумують завдання, малюють, перевіряють себе і записують уроки. "
-            "Один раунд займає 2-5 хвилин. Поки йде тренування, малювати в чаті не можна.",
+            content, t("training"), t("training_hint"),
         )
         self.training_button = self._outline_button(
-            row, "Зупинити" if self.training else "Почати", self.toggle_training,
+            row, t("stop") if self.training else t("start"), self.toggle_training,
         )
         self.training_label = ctk.CTkLabel(
             content, text=self.training_status, font=self.font(12), text_color=theme.TEXT,
@@ -2676,7 +2680,7 @@ class LinumApp(ctk.CTk):
         items = lessons.load()
         if not items:
             ctk.CTkLabel(
-                content, text="Уроків поки немає. Оцініть кілька картинок кнопками під ними.",
+                content, text=t("no_lessons"),
                 font=self.font(13), text_color=theme.MUTED, anchor="w",
             ).pack(fill="x")
             return
@@ -2686,29 +2690,29 @@ class LinumApp(ctk.CTk):
             self.open_settings("experience")
 
         sources = {
-            "training": "Агент-Тренер", "review": "Агент-Критик", "rating": "Ваша оцінка", "developer": "Розробник",
+            "training": t("agent_trainer"), "review": t("agent_critic"), "rating": t("your_rating"), "developer": t("developer"),
         }
         for lesson in reversed(items):
             when = datetime.fromisoformat(lesson["created"]).strftime("%d.%m %H:%M")
             row = self._setting_row(content, lesson["text"], f"{sources.get(lesson['source'], '')}  ·  {when}")
-            self._outline_button(row, "Видалити", lambda i=lesson["id"]: forget(i), danger=True)
+            self._outline_button(row, t("delete"), lambda i=lesson["id"]: forget(i), danger=True)
 
     def _settings_storage(self, content):
-        self._settings_title(content, "Сховище")
+        self._settings_title(content, t("storage"))
 
         images = self.all_images()
         megabytes = sum(Path(message["image"]).stat().st_size for _, message in images) / (1024 * 1024)
         chats = [chat for chat in self.chats.chats if chat["messages"]]
 
-        row = self._setting_row(content, "Зображення", f"{len(images)} шт., {megabytes:.1f} МБ")
-        self._outline_button(row, "Відкрити папку", lambda: open_folder(OUTPUTS_DIR))
+        row = self._setting_row(content, t("images"), t("images_stats").format(count=len(images), megabytes=f"{megabytes:.1f}"))
+        self._outline_button(row, t("open_folder"), lambda: open_folder(OUTPUTS_DIR))
 
         models_folder = Path(MODELS[DEFAULT_MODEL]["path"]).parent
-        row = self._setting_row(content, "Моделі", f"Файли моделей лежать у {models_folder.as_posix()}")
-        self._outline_button(row, "Відкрити папку", lambda: open_folder(models_folder))
+        row = self._setting_row(content, t("models"), t("models_location").format(path=models_folder.as_posix()))
+        self._outline_button(row, t("open_folder"), lambda: open_folder(models_folder))
 
-        row = self._setting_row(content, "Чати", f"{len(chats)} шт. Видалення чатів не видаляє самих зображень")
-        self._outline_button(row, "Видалити всі чати", self.later(self.clear_all_chats), danger=True)
+        row = self._setting_row(content, t("chats"), t("chats_stats").format(count=len(chats)))
+        self._outline_button(row, t("delete_all_chats"), self.later(self.clear_all_chats), danger=True)
 
     def _settings_about(self, content):
         head = ctk.CTkFrame(content, fg_color="transparent")
@@ -2717,25 +2721,25 @@ class LinumApp(ctk.CTk):
         names.pack(side="left")
         ctk.CTkLabel(names, text=APP_NAME, font=self.font(20, "bold"), text_color=theme.TEXT, anchor="w").pack(anchor="w")
         ctk.CTkLabel(
-            names, text=f"Версія {APP_VERSION}", font=self.font(13), text_color=theme.MUTED, anchor="w"
+            names, text=t("version").format(version=APP_VERSION), font=self.font(13), text_color=theme.MUTED, anchor="w"
         ).pack(anchor="w")
 
-        gpu = "Визначиться після завантаження моделі"
+        gpu = t("after_model_load")
         torch = sys.modules.get("torch")
         if torch is not None and torch.cuda.is_available():
             gpu = torch.cuda.get_device_name(0)
 
-        self._setting_row(content, "Модель", f"{self.loaded_model or DEFAULT_MODEL}: Stable Diffusion 1.5")
-        self._setting_row(content, "Відеокарта", gpu)
+        self._setting_row(content, t("model"), f"{self.loaded_model or DEFAULT_MODEL}: Stable Diffusion 1.5")
+        self._setting_row(content, t("gpu"), gpu)
         self._setting_row(
-            content, "Режим роботи", "Повна точність (fp32), частини моделі чекають своєї черги в оперативній пам'яті"
+            content, t("work_mode"), t("work_mode_hint")
         )
-        self._setting_row(content, "Переклад", "Helsinki-NLP opus-mt для української і російської, працює на процесорі")
+        self._setting_row(content, t("translation"), t("translation_hint"))
 
     def clear_all_chats(self):
         confirmed = messagebox.askyesno(
-            "Видалити всі чати",
-            "Видалити всі чати?\nЗображення залишаться в папці outputs.",
+            t("delete_all_chats"),
+            t("delete_all_question"),
             parent=self,
         )
         if not confirmed:

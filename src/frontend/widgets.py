@@ -12,6 +12,7 @@ import weakref
 import customtkinter as ctk
 
 from src.frontend import theme
+from src.frontend.i18n import t
 
 
 def themed(color):
@@ -70,17 +71,17 @@ def text_menu(widget, event, editable):
         widget.clipboard_append(widget.get("1.0", "end-1c"))
 
     if editable:
-        menu.add_command(label="Вирізати", accelerator="Ctrl+X", state=state(has_selection),
+        menu.add_command(label=t("cut"), accelerator="Ctrl+X", state=state(has_selection),
                          command=lambda: widget.event_generate("<<Cut>>"))
-    menu.add_command(label="Копіювати", accelerator="Ctrl+C", state=state(has_selection),
+    menu.add_command(label=t("copy"), accelerator="Ctrl+C", state=state(has_selection),
                      command=lambda: widget.event_generate("<<Copy>>"))
     if editable:
-        menu.add_command(label="Вставити", accelerator="Ctrl+V",
+        menu.add_command(label=t("paste"), accelerator="Ctrl+V",
                          command=lambda: widget.event_generate("<<Paste>>"))
     else:
-        menu.add_command(label="Копіювати все повідомлення", command=copy_all)
+        menu.add_command(label=t("copy_message"), command=copy_all)
     menu.add_separator()
-    menu.add_command(label="Виділити все", accelerator="Ctrl+A", command=select_all)
+    menu.add_command(label=t("select_all"), accelerator="Ctrl+A", command=select_all)
     try:
         menu.tk_popup(event.x_root, event.y_root)
     finally:
