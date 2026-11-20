@@ -14,3 +14,4 @@ sentencepiece==0.2.3
 sacremoses==0.2.0
 peft==0.21.3
 ollama==0.6.3
+spandrel==0.4.2
