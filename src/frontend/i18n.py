@@ -134,6 +134,7 @@ TEXTS = {
     "round_outcome_problem": {"uk": 'Критик: {problem} Виправлення не допомогло.', "en": 'Critic: {problem} The fix did not help.', "ru": 'Критик: {problem} Исправление не помогло.'},
     "round_outcome_fixed": {"uk": 'Критик: {problem} Виправлено.', "en": 'Critic: {problem} Fixed.', "ru": 'Критик: {problem} Исправлено.'},
     "round_outcome_lesson": {"uk": 'Критик: {problem} Урок: {lesson}', "en": 'Critic: {problem} Lesson: {lesson}', "ru": 'Критик: {problem} Урок: {lesson}'},
+    "stopped": {"uk": "Зупинено", "en": "Stopped", "ru": "Остановлено"},
     "review_redrawn": {"uk": "Перевірка: {problem} Перемальовано.", "en": "Check: {problem} Redrawn.", "ru": "Проверка: {problem} Перерисовано."},
     "checked": {"uk": "Перевірено", "en": "Checked", "ru": "Проверено"},
     "recolored": {"uk": "Перефарбовано", "en": "Recolored", "ru": "Перекрашено"},

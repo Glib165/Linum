@@ -1724,7 +1724,11 @@ class LinumApp(ctk.CTk):
             self.job_id += 1
             self.cancel_requested = False
         state = "disabled" if busy else "normal"
-        self.send_button.configure(state="normal" if not busy and self.pipe is not None else "disabled")
+        if busy:
+            # Поки Linum думає чи малює, кнопка надсилання стає кнопкою "Стоп"
+            self.send_button.configure(text="■", state="normal")
+        else:
+            self.send_button.configure(text="↑", state="normal" if self.pipe is not None else "disabled")
         for widget in (self.brain_button, self.style_menu, self.size_menu):
             widget.configure(state=state)
         if busy and self.brain_popup is not None:
@@ -2270,8 +2274,9 @@ class LinumApp(ctk.CTk):
         started = time.time()
         settings = self.reasoning()
         style_text = self.styles().get(style, "")
-        job = self.job_id
         self._set_busy(True, generating=True)
+        # Номер цієї справи беремо ПІСЛЯ _set_busy: він там збільшується
+        job = self.job_id
         self.set_status(t("creating_with_model").format(model=self.model_title(model)))
 
         def on_step(step, total):
