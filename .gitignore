@@ -18,6 +18,8 @@ data/datasets/*
 data/chats.json
 data/lessons.json
 data/lessons.tmp
+data/memory.json
+data/memory.tmp
 data/chats.tmp
 config/settings.json
 config/settings.tmp

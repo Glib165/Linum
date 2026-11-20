@@ -50,6 +50,11 @@ RULES = """
 - "add": true, якщо треба ДОДАТИ новий предмет, якого на фото ще немає ("додай кота на диван").
   Тоді "targets" порожній, а "prompt" описує все фото вже з новим предметом. Інакше false.
 - "place": тільки для "add": куди додати, коротко англійською ("on this sofa", "in the sky"). Інакше "".
+- "remember": для будь-якого action. Якщо користувач розповів про себе щось варте пам'яті на майбутні
+  розмови (ім'я, смаки, улюблені стилі й кольори, постійні прохання на кшталт "завжди малюй мені аніме"),
+  запиши це одним коротким реченням українською про користувача в третій особі
+  ("Просить звертатися до нього на «ти».", "Любить темні, похмурі тони."). Не записуй разові прохання про одну картинку
+  і те, що вже є в пам'яті. Інакше "".
 - "colors": тільки для "edit", коли треба ЛИШЕ змінити колір предмета, а форма і все інше лишаються
   (перефарбувати, поміняти кольори місцями). Список змін {"from": ..., "to": ...}, кольори у форматі "#RRGGBB".
   "from" - колір, який ЗАРАЗ є на предметі (подивись на фото), або "", якщо весь предмет стає одного кольору.
@@ -108,6 +113,7 @@ DECISION_FORMAT = {
         "remove": {"type": "boolean"},
         "add": {"type": "boolean"},
         "place": {"type": "string"},
+        "remember": {"type": "string"},
         "colors": {
             "type": "array",
             "items": {
@@ -121,7 +127,7 @@ DECISION_FORMAT = {
             },
         },
     },
-    "required": ["action", "reply", "prompt", "strength", "targets", "where", "remove", "colors", "add", "place"],
+    "required": ["action", "reply", "prompt", "strength", "targets", "where", "remove", "colors", "add", "place", "remember"],
 }
 
 # Рамка предмета: [верх, лівий край, низ, правий край] у частках від 0 до 1000.
@@ -271,6 +277,11 @@ def decide(history, settings=None):
     release_others(settings["model"])
     # Уроки з досвіду Gaia читає разом із правилами
     experience = lessons.as_prompt()
+    from src.ai import memory
+
+    known = memory.as_prompt()
+    if known:
+        experience = (experience + "\n" if experience else "") + known
     # Нагадування наприкінці: маленькі моделі інакше часто відповідають мовою правил (українською)
     last = next((m["content"] for m in reversed(history) if m["role"] == "user"), "")
     last = last.split("]\n", 1)[-1][:300]  # без службової примітки про фото
@@ -290,7 +301,7 @@ def decide(history, settings=None):
         decision = json.loads(response["message"]["content"])
     except json.JSONDecodeError:
         return {"action": "chat", "reply": clean(response["message"]["content"]), "prompt": "", "strength": 0,
-                "targets": [], "where": "", "remove": False, "colors": [], "add": False, "place": ""}
+                "targets": [], "where": "", "remove": False, "colors": [], "add": False, "place": "", "remember": ""}
 
     action = decision.get("action")
     if action not in ("chat", "image", "edit"):
@@ -313,6 +324,8 @@ def decide(history, settings=None):
         "remove": bool(decision.get("remove")) and action == "edit",
         "add": bool(decision.get("add")) and action == "edit",
         "place": str(decision.get("place") or "") if action == "edit" else "",
+        # Що запам'ятати про користувача на майбутні розмови (одне речення) або ""
+        "remember": clean(str(decision.get("remember") or ""))[:200],
         "colors": clean_colors(decision.get("colors")) if action == "edit" and not decision.get("remove") else [],
     }
 

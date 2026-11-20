@@ -1725,6 +1725,20 @@ class LinumApp(ctk.CTk):
             # Коли Linum вільний, Вчитель обробляє чергу уроків
             self.after(300, self._run_lessons)
 
+    # ---------- Пам'ять про користувача ----------
+
+    def remember(self, text):
+        # Записує факт про вас, якщо такого (чи дуже схожого) ще немає в пам'яті
+        from src.ai import lessons, memory
+
+        try:
+            if any(lessons.similarity(text, fact["text"]) >= 0.6 for fact in memory.load()):
+                return
+            memory.add(text)
+        except Exception:
+            return
+        self.set_status(t("remembered").format(text=shorten(text, 140)))
+
     # ---------- Збільшення фото ----------
 
     def upscale_image(self, message, scale=2):
@@ -2041,6 +2055,8 @@ class LinumApp(ctk.CTk):
             self._scroll_to_bottom()
         self._set_busy(False)
         self.set_status()
+        if decision.get("remember"):
+            self.remember(decision["remember"])
 
         if decision["action"] == "chat":
             self.prompt_entry.focus_set()
@@ -2584,6 +2600,7 @@ class LinumApp(ctk.CTk):
             ("appearance", t("appearance")),
             ("generation", t("generation")),
             ("experience", t("experience")),
+            ("memory", t("memory")),
             ("storage", t("storage")),
             ("about", t("about")),
         ):
@@ -2832,6 +2849,29 @@ class LinumApp(ctk.CTk):
             when = datetime.fromisoformat(lesson["created"]).strftime("%d.%m %H:%M")
             row = self._setting_row(content, lesson["text"], f"{sources.get(lesson['source'], '')}  ·  {when}")
             self._outline_button(row, t("delete"), lambda i=lesson["id"]: forget(i), danger=True)
+
+    def _settings_memory(self, content):
+        # Що Gaia пам'ятає про вас між чатами
+        from src.ai import memory
+
+        self._settings_title(content, t("memory"))
+        ctk.CTkLabel(
+            content, text=t("memory_intro"), font=self.font(12), text_color=theme.MUTED,
+            anchor="w", justify="left", wraplength=560,
+        ).pack(fill="x", pady=(0, 18))
+        facts = memory.load()
+        if not facts:
+            ctk.CTkLabel(content, text=t("memory_empty"), font=self.font(13), text_color=theme.MUTED, anchor="w").pack(fill="x")
+            return
+
+        def forget(fact_id):
+            memory.remove(fact_id)
+            self.open_settings("memory")
+
+        for fact in reversed(facts):
+            when = datetime.fromisoformat(fact["created"]).strftime("%d.%m %H:%M")
+            row = self._setting_row(content, fact["text"], when)
+            self._outline_button(row, t("delete"), lambda i=fact["id"]: forget(i), danger=True)
 
     def _settings_storage(self, content):
         self._settings_title(content, t("storage"))
