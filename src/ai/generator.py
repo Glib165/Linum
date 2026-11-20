@@ -90,8 +90,10 @@ def save_image(image):
     return path
 
 
-def working_size(width, height, longest=768):
-    scale = min(1.0, longest / max(width, height))
+def working_size(width, height, longest=768, enlarge=1.0):
+    # enlarge: у скільки разів максимум можна збільшити маленький шматок фото,
+    # щоб художник домалював його з деталями (1.0 означає лише зменшувати)
+    scale = min(enlarge, longest / max(width, height))
     new_width = int(width * scale) // 8 * 8
     new_height = int(height * scale) // 8 * 8
     return new_width, new_height
@@ -155,16 +157,21 @@ def edit_image(pipe, image_path, prompt, mask=None, strength=0.6,
     """Змінює фото. mask: біле = перемалювати. fill=True: спершу залити виділене фоном (щоб прибрати предмет)."""
     edit_pipe = edit_pipeline(pipe)
 
-    # Відкриваємо фото і зменшуємо до розміру, з яким може працювати модель
     original = Image.open(image_path).convert("RGB")
-    width, height = working_size(original.width, original.height)
-    source = original.resize((width, height), Image.LANCZOS)
+    full_mask = mask.convert("L").resize(original.size) if mask is not None else None
+
+    # Якою частиною фото займається художник: усім фото або шматком навколо виділення.
+    # Шматок збільшується до робочого розміру, тож дрібні місця домальовуються з деталями.
+    region = edit_region(full_mask, original.size)
+    crop = original.crop(region)
+    width, height = working_size(crop.width, crop.height, enlarge=3.0 if mask is not None else 1.0)
+    source = crop.resize((width, height), Image.LANCZOS)
 
     # Маска: біле = перемалювати, чорне = не чіпати
     if mask is None:
         work_mask = Image.new("L", (width, height), 255)
     else:
-        work_mask = mask.convert("L").resize((width, height))
+        work_mask = full_mask.crop(region).resize((width, height))
         work_mask = work_mask.filter(ImageFilter.MaxFilter(15))
 
     # Модель бачить фото з уже залитим фоном місцем, а поза маскою все одно залишиться оригінал
@@ -198,9 +205,31 @@ def edit_image(pipe, image_path, prompt, mask=None, strength=0.6,
     ).images[0]
     free_gpu_memory()
 
-    # Поза виділенням повертаємо оригінальні пікселі, а межу робимо м'якою
-    if mask is not None:
-        soft_mask = work_mask.filter(ImageFilter.GaussianBlur(6))
-        result = Image.composite(result, source, soft_mask)
+    # Повертаємо результат до розміру оригіналу. Поза виділенням лишаються оригінальні пікселі
+    # (у повному розмірі, без втрати якості), а межу робимо м'якою.
+    patch = result.resize(crop.size, Image.LANCZOS)
+    if mask is None:
+        return save_image(patch), total
+    soft_mask = work_mask.filter(ImageFilter.GaussianBlur(6)).resize(crop.size, Image.LANCZOS)
+    final = original.copy()
+    final.paste(patch, region[:2], soft_mask)
+    return save_image(final), total
 
-    return save_image(result), total
+
+def edit_region(mask, size, margin=0.6, smallest=256):
+    """Прямокутник (лівий, верхній, правий, нижній) частини фото, яку отримає художник.
+
+    Без маски - усе фото. З маскою - виділене місце з запасом навколо (margin від його розміру
+    з кожного боку), щоб художник бачив, що довкола, і домалював у тому ж стилі.
+    """
+    width, height = size
+    box = mask.getbbox() if mask is not None else None
+    if box is None:
+        return 0, 0, width, height
+    left, top, right, bottom = box
+    # Запас навколо, але шматок не менший за smallest пікселів (менший художник малює гірше)
+    pad_x = max((right - left) * margin, (smallest - (right - left)) / 2, 0)
+    pad_y = max((bottom - top) * margin, (smallest - (bottom - top)) / 2, 0)
+    left, right = max(0, int(left - pad_x)), min(width, int(right + pad_x))
+    top, bottom = max(0, int(top - pad_y)), min(height, int(bottom + pad_y))
+    return left, top, right, bottom

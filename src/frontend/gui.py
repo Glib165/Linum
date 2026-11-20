@@ -27,6 +27,7 @@ from config.config import (
     OUTPUTS_DIR,
     SETTINGS_FILE,
     UPLOADS_DIR,
+    UPLOAD_MAX_SIZE,
     SIZES,
     STYLES,
     REASONING,
@@ -741,7 +742,7 @@ class LinumApp(ctk.CTk):
         else:
             image = image.convert("RGB")
         # Дуже великі фото зменшуємо: моделі все одно працюють з ~768 пікселів
-        image.thumbnail((1536, 1536), Image.LANCZOS)
+        image.thumbnail((UPLOAD_MAX_SIZE, UPLOAD_MAX_SIZE), Image.LANCZOS)
 
         folder = Path(UPLOADS_DIR)
         folder.mkdir(parents=True, exist_ok=True)

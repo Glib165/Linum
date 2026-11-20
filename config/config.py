@@ -7,6 +7,8 @@ IMAGE_HEIGHT = 512
 OUTPUTS_DIR = "outputs/generated"
 # Сюди копіюються фото, які користувач додав у чат
 UPLOADS_DIR = "data/uploads"
+# Найбільший розмір фото, яке користувач додає в чат (довша сторона, у пікселях)
+UPLOAD_MAX_SIZE = 2048
 
 MODELS = {
     "Fornax": {"steps": 6, "path": "models/checkpoints/dreamshaper_8.safetensors", "lora": "latent-consistency/lcm-lora-sdv1-5", "guidance": 1.5},
