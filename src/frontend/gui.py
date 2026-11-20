@@ -36,6 +36,7 @@ from src.backend.services.chat_store import ChatStore
 from src.backend.services.settings_store import SettingsStore
 from src.frontend import theme
 from src.frontend.icons import make_icon
+from src.frontend.i18n import LANGUAGES, set_language, t
 from src.frontend.widgets import (
     PromptBox,
     SelectableText,
@@ -48,7 +49,6 @@ from src.frontend.widgets import (
 THEMES = {"Світла": "light", "Темна": "dark", "Системна": "system"}
 MODEL_TIERS = {"Fornax": "швидка", "Gaia": "збалансована", "Cygnus": "найкраща"}
 LANGUAGE_NAMES = {"uk": "з української", "ru": "з російської"}
-LANGUAGE_HINT = "Enter надсилає, Shift+Enter переносить рядок"
 
 # Анімація "думаю" (кільце з точок): розмір кадрів і колір точок у світлій і темній темі
 SPINNER_FRAME_SIZE = 144
@@ -98,13 +98,13 @@ def load_icon_mask(path):
 def greeting_text(name):
     hour = datetime.now().hour
     if 5 <= hour < 12:
-        text = "Доброго ранку"
+        text = t("good_morning")
     elif 12 <= hour < 18:
-        text = "Добрий день"
+        text = t("good_afternoon")
     elif 18 <= hour < 23:
-        text = "Добрий вечір"
+        text = t("good_evening")
     else:
-        text = "Доброї ночі"
+        text = t("good_night")
     return f"{text}, {name}" if name else text
 
 
@@ -159,6 +159,8 @@ class LinumApp(ctk.CTk):
         super().__init__()
 
         self.settings = SettingsStore(SETTINGS_FILE)
+        # Мова інтерфейсу: усі написи t(...) далі показуються нею
+        set_language(self.settings.get("language"))
         self.chats = ChatStore(CHATS_FILE)
         ctk.set_appearance_mode(self.settings.get("theme"))
 
@@ -398,7 +400,7 @@ class LinumApp(ctk.CTk):
         return self.card_cache[key]
 
     def set_status(self, text=None):
-        self.status_label.configure(text=text or LANGUAGE_HINT)
+        self.status_label.configure(text=text or t("send_hint"))
 
     def _scroll_to_bottom(self, instant=False):
         canvas = self.feed._parent_canvas
@@ -429,10 +431,10 @@ class LinumApp(ctk.CTk):
         nav.grid(row=1, column=0, sticky="ew", padx=8)
         self.nav_buttons = {}
         for key, text, icon, command in (
-            ("new", "Новий чат", "plus", self.new_chat),
-            ("search", "Пошук", "search", self.toggle_search),
-            ("gallery", "Галерея", "gallery", self.show_gallery),
-            ("folder", "Папка із зображеннями", "folder", lambda: open_folder(OUTPUTS_DIR)),
+            ("new", t("new_chat"), "plus", self.new_chat),
+            ("search", t("search"), "search", self.toggle_search),
+            ("gallery", t("gallery"), "gallery", self.show_gallery),
+            ("folder", t("images_folder"), "folder", lambda: open_folder(OUTPUTS_DIR)),
         ):
             button = ctk.CTkButton(
                 nav,
@@ -453,7 +455,7 @@ class LinumApp(ctk.CTk):
 
         self.search_entry = ctk.CTkEntry(
             self.sidebar,
-            placeholder_text="Шукати в чатах",
+            placeholder_text=t("search_placeholder"),
             height=34,
             corner_radius=8,
             border_width=1,
@@ -468,7 +470,7 @@ class LinumApp(ctk.CTk):
 
         # Заголовок над списком: "Закріплені", якщо є закріплені чати, інакше "Нещодавні"
         self.list_title = ctk.CTkLabel(
-            self.sidebar, text="Нещодавні", font=self.font(12), text_color=theme.MUTED, anchor="w"
+            self.sidebar, text=t("recent"), font=self.font(12), text_color=theme.MUTED, anchor="w"
         )
         self.list_title.grid(row=3, column=0, sticky="ew", padx=18, pady=(18, 4))
 
@@ -602,7 +604,7 @@ class LinumApp(ctk.CTk):
 
         self.prompt_entry = PromptBox(
             composer,
-            placeholder="Напишіть повідомлення або попросіть намалювати",
+            placeholder=t("prompt_placeholder"),
             font=self.font(15),
             width=CONTENT_MAX_WIDTH - 40,
             on_submit=self.on_generate,
@@ -677,7 +679,7 @@ class LinumApp(ctk.CTk):
         self.update_brain_button()
 
         self.status_label = ctk.CTkLabel(
-            self.composer_block, text=LANGUAGE_HINT, font=self.font(12), text_color=theme.MUTED, anchor="w"
+            self.composer_block, text=t("send_hint"), font=self.font(12), text_color=theme.MUTED, anchor="w"
         )
         self.status_label.grid(row=1, column=0, sticky="w", padx=(14, 0), pady=(6, 0))
 
@@ -856,12 +858,12 @@ class LinumApp(ctk.CTk):
             # Чати проєктів видно всередині проєкту, а не в загальному списку
             free = [chat for chat in active if not chat.get("pinned") and not chat.get("project")]
             if pinned:
-                self._chat_section("Закріплені")
+                self._chat_section(t("pinned"))
                 for chat in pinned:
                     self._chat_row(chat)
             projects = sorted({chat["project"] for chat in active if chat.get("project")}, key=str.lower)
             if projects:
-                self._chat_section("Проєкти")
+                self._chat_section(t("projects"))
                 for name in projects:
                     self._project_row(name, sum(1 for chat in active if chat.get("project") == name))
                     other_rows += 1
@@ -872,7 +874,7 @@ class LinumApp(ctk.CTk):
                         self._chat_row(chat)
             rest = [chat for chat in free if not chat.get("section")]
             if rest:
-                self._chat_section("Нещодавні")
+                self._chat_section(t("recent"))
                 for chat in rest:
                     self._chat_row(chat)
             archived = len(chats) - len(active)
@@ -1537,11 +1539,11 @@ class LinumApp(ctk.CTk):
 
         actions = ctk.CTkFrame(card, fg_color="transparent")
         actions.pack(fill="x", padx=8, pady=(2, 8))
-        self.small_button(actions, "Ще варіант", self.small_icons["refresh"], lambda m=message: self.variation(m)).pack(side="left")
-        self.small_button(actions, "Копіювати запит", self.small_icons["copy"], lambda m=message: self.copy_prompt(m)).pack(side="left")
+        self.small_button(actions, t("more_variant"), self.small_icons["refresh"], lambda m=message: self.variation(m)).pack(side="left")
+        self.small_button(actions, t("copy_prompt"), self.small_icons["copy"], lambda m=message: self.copy_prompt(m)).pack(side="left")
         if path.exists():
-            self.small_button(actions, "Відкрити", self.small_icons["open"], lambda p=path: os.startfile(p.resolve())).pack(side="left")
-            self.small_button(actions, "У папці", self.small_icons["folder"], lambda p=path: self.show_in_folder(p)).pack(side="left")
+            self.small_button(actions, t("open"), self.small_icons["open"], lambda p=path: os.startfile(p.resolve())).pack(side="left")
+            self.small_button(actions, t("in_folder"), self.small_icons["folder"], lambda p=path: self.show_in_folder(p)).pack(side="left")
         return row
 
     def _add_pending_card(self, width, height):
@@ -2244,7 +2246,7 @@ class LinumApp(ctk.CTk):
         items = (
             ("Налаштування", "settings", lambda: self.open_settings("general")),
             ("Світла тема" if is_dark else "Темна тема", "palette", self.quick_toggle_theme),
-            ("Папка із зображеннями", "folder", lambda: open_folder(OUTPUTS_DIR)),
+            (t("images_folder"), "folder", lambda: open_folder(OUTPUTS_DIR)),
             ("Про Linum", "model", lambda: self.open_settings("about")),
         )
         box = ctk.CTkFrame(menu, fg_color="transparent")
@@ -2340,10 +2342,10 @@ class LinumApp(ctk.CTk):
             return button
 
         viewer_button("Закрити", self.later(self.close_viewer))
-        viewer_button("У папці", lambda: self.show_in_folder(path))
+        viewer_button(t("in_folder"), lambda: self.show_in_folder(path))
         copy_button = viewer_button("Копіювати", lambda: self.copy_image(path, copy_button))
         self.viewer_copy = lambda: self.copy_image(path, copy_button)
-        viewer_button("Відкрити", lambda: os.startfile(path.resolve()))
+        viewer_button(t("open"), lambda: os.startfile(path.resolve()))
         if chat_id is not None:
             viewer_button("Перейти до чату", self.later(lambda: (self.close_viewer(), self.open_chat(chat_id))))
 
@@ -2554,6 +2556,24 @@ class LinumApp(ctk.CTk):
             "Українські й російські запити перекладаються англійською, бо модель розуміє лише її",
         )
         self._switch(row, "translate")
+
+        row = self._setting_row(content, t("language"), t("language_hint"))
+        selector = ctk.CTkSegmentedButton(
+            row, values=list(LANGUAGES.values()), command=self.change_language, **self.segmented_style()
+        )
+        selector.set(LANGUAGES.get(self.settings.get("language"), LANGUAGES["uk"]))
+        selector.grid(row=0, column=1, sticky="e")
+
+    def change_language(self, name):
+        # Мова інтерфейсу міняється після перезапуску: усі написи створюються під час запуску
+        code = next(code for code, label in LANGUAGES.items() if label == name)
+        if code == self.settings.get("language"):
+            return
+        self.settings.set("language", code)
+        set_language(code)
+        if messagebox.askyesno(t("restart_title"), t("restart_question"), parent=self):
+            subprocess.Popen([sys.executable, *sys.argv])
+            self.destroy()
 
     def _settings_appearance(self, content):
         self._settings_title(content, "Вигляд")

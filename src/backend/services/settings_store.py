@@ -16,6 +16,7 @@ DEFAULTS = {
     "quality_boost": True,
     "translate": True,
     "reasoning": DEFAULT_REASONING,
+    "language": "uk",
 }
 
 
