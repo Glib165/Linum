@@ -109,6 +109,14 @@ def _check(d):
     d.line((16, 50, 38, 72, 80, 26), fill=255, width=STROKE, joint="curve")
 
 
+def _expand(d):
+    # Дві стрілки в протилежні кути: збільшити
+    d.line((54, 14, 82, 14, 82, 42), fill=255, width=STROKE, joint="curve")
+    d.line((82, 14, 56, 40), fill=255, width=STROKE)
+    d.line((14, 54, 14, 82, 42, 82), fill=255, width=STROKE, joint="curve")
+    d.line((14, 82, 40, 56), fill=255, width=STROKE)
+
+
 def _close(d):
     d.line((22, 22, 74, 74), fill=255, width=STROKE + 2)
     d.line((74, 22, 22, 74), fill=255, width=STROKE + 2)
@@ -131,6 +139,7 @@ DRAWERS = {
     "model": _model,
     "bulb": _bulb,
     "dots": _dots,
+    "expand": _expand,
     "check": _check,
     "thumb_up": _thumb_up,
     "thumb_down": _thumb_up,

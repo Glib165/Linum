@@ -2,6 +2,7 @@
 models/checkpoints/*
 models/loras/*
 models/embeddings/*
+models/upscalers/*
 
 # Generated and temporary output
 outputs/generated/*

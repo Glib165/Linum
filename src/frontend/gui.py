@@ -154,6 +154,13 @@ def free_gpu_memory():
         torch.cuda.empty_cache()
 
 
+def torch_out_of_memory():
+    # Клас помилки "не вистачило відеопам'яті" з PyTorch
+    import torch
+
+    return torch.cuda.OutOfMemoryError
+
+
 def open_folder(path):
     folder = Path(path)
     folder.mkdir(parents=True, exist_ok=True)
@@ -222,7 +229,7 @@ class LinumApp(ctk.CTk):
             "plus", "search", "gallery", "folder", "sidebar", "settings", "trash",
         )}
         self.small_icons = {name: make_icon(name, 15, theme.MUTED) for name in (
-            "refresh", "copy", "open", "folder", "palette", "frame", "model", "bulb",
+            "refresh", "copy", "open", "folder", "palette", "frame", "model", "bulb", "expand",
         )}
         self.dots_icon = make_icon("dots", 16, theme.TEXT)
         # Оцінка картинки: сірі іконки, а вибрана оцінка яскравіша
@@ -1518,6 +1525,8 @@ class LinumApp(ctk.CTk):
             ).pack(anchor="w", padx=14, pady=(2, 2))
 
         details = [message["model"]]
+        if message.get("upscaled"):
+            details.append(t("upscaled").format(scale=message["upscaled"]))
         if message.get("checked") and not message.get("review"):
             details.append(t("checked"))
         if message.get("recolored"):
@@ -1538,6 +1547,13 @@ class LinumApp(ctk.CTk):
         ctk.CTkLabel(
             info, text="  ·  ".join(details), font=self.font(12), text_color=theme.MUTED, anchor="w"
         ).pack(side="left", fill="x", expand=True)
+        if path.exists():
+            # Збільшити в 2 рази: у чат додається збільшена копія
+            ctk.CTkButton(
+                info, text="×2", image=self.small_icons["expand"], compound="left", width=0, height=26,
+                corner_radius=8, font=self.font(12), fg_color="transparent", hover_color=theme.SURFACE_HOVER,
+                text_color=theme.TEXT, command=lambda m=message: self.upscale_image(m),
+            ).pack(side="left", padx=(0, 4))
         if message.get("kind") == "image" and path.exists():
             # Оцінка: з неї Linum робить урок і вчиться
             buttons = {}
@@ -1704,6 +1720,59 @@ class LinumApp(ctk.CTk):
         if not busy:
             # Коли Linum вільний, Вчитель обробляє чергу уроків
             self.after(300, self._run_lessons)
+
+    # ---------- Збільшення фото ----------
+
+    def upscale_image(self, message, scale=2):
+        # Збільшує картинку в scale разів і додає в чат збільшену копію
+        if self.busy:
+            return
+        path = Path(message["image"])
+        with Image.open(path) as picture:
+            width, height = picture.size
+        if max(width, height) * scale > 6144:
+            self.set_status(t("upscale_too_big"))
+            return
+        chat_id = self.current_chat_id
+        started = time.time()
+        self._set_busy(True, generating=True)
+        self._add_pending_card(width * scale, height * scale)
+        self.pending["title"].configure(text=t("upscaling").format(scale=scale))
+        self._scroll_to_bottom()
+
+        def work():
+            try:
+                from src.ai.generator import save_image
+                from src.ai.upscaler import upscale
+
+                with Image.open(path) as picture:
+                    picture = picture.convert("RGB")
+                    try:
+                        bigger = upscale(picture, scale)
+                    except torch_out_of_memory():
+                        # Відеопам'ять могла зайняти Gaia: звільняємо її і пробуємо ще раз
+                        from src.ai import brain
+
+                        brain.unload()
+                        free_gpu_memory()
+                        bigger = upscale(picture, scale)
+                new_path = save_image(bigger)
+            except Exception as error:
+                self.after(0, self._on_generate_failed, error)
+                return
+            copy = {key: value for key, value in message.items()
+                    if key not in ("rating", "review", "checked", "first_image", "second_image", "kept_first")}
+            copy.update({
+                "image": str(new_path),
+                "upscaled": scale * message.get("upscaled", 1),
+                "upscaled_from": str(path),
+                "steps": 0,
+                "seconds": round(time.time() - started),
+                "created": datetime.now().isoformat(timespec="seconds"),
+            })
+            self.after(0, self._on_generated, chat_id, copy)
+
+        threading.Thread(target=work, daemon=True).start()
 
     # ---------- Самонавчання ----------
 
