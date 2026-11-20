@@ -357,8 +357,15 @@ def locate(image_path, name, where="", model=LLM_MODEL):
 
 REVIEW_FORMAT = {
     "type": "object",
-    "properties": {"ok": {"type": "boolean"}, "problem": {"type": "string"}, "prompt": {"type": "string"}},
-    "required": ["ok", "problem", "prompt"],
+    "properties": {
+        "ok": {"type": "boolean"},
+        "problem": {"type": "string"},
+        "prompt": {"type": "string"},
+        "fix": {"type": "string", "enum": ["redraw", "recolor"]},
+        "targets": {"type": "array", "items": {"type": "string"}},
+        "colors": DECISION_FORMAT["properties"]["colors"],
+    },
+    "required": ["ok", "problem", "prompt", "fix", "targets", "colors"],
 }
 
 REVIEW_RULES = """
@@ -371,12 +378,23 @@ REVIEW_RULES = """
 - "problem": коротко українською, що не так (одне речення). Якщо ok, "".
 - "prompt": якщо ok false, новий опис АНГЛІЙСЬКОЮ для художника (20-60 слів через кому), який виправить
   проблему: головне пиши на початку і чітко. Якщо ok, "".
+- "fix": як виправити. "recolor" ЛИШЕ тоді, коли на картинці саме той предмет, який просили, з правильною
+  формою, кількістю частин і розташуванням, і неправильні тільки кольори (наприклад, справжній прапор
+  з двома смугами, але смуги переплутані). Якщо предмет не той (тканина чи рушник замість прапора,
+  забагато смуг, зайві деталі), це "redraw". "redraw" також для всього іншого і коли ok true.
+- "targets": тільки для "recolor": 1-2 короткі англійські назви предмета, який треба перефарбувати
+  (наприклад ["flag"], ["car"]). Інакше [].
+- "colors": тільки для "recolor": які кольори на які міняти, так само як у рішеннях про зміну фото:
+  [{"from": "#RRGGBB" або "", "to": "#RRGGBB", "part": "top"/"bottom"/"left"/"right"/""}].
+  Наприклад, якщо на прапорі України жовта смуга зверху, а синя знизу (а має бути навпаки):
+  [{"from": "", "to": "#0057B7", "part": "top"}, {"from": "", "to": "#FFD700", "part": "bottom"}]. Інакше [].
 Ніколи не використовуй емодзі.
 """
 
 
 def review(image_path, request, prompt, settings=None):
-    """Gaia дивиться на готову картинку. Повертає {"ok", "problem", "prompt"} або None, якщо не вдалося."""
+    """Gaia дивиться на готову картинку. Повертає {"ok", "problem", "prompt", "fix", "targets", "colors"}
+    або None, якщо не вдалося. fix: "recolor" (перефарбувати targets у colors) або "redraw" (перемалювати за prompt)."""
     settings = settings or level(DEFAULT_REASONING)
     release_others(settings["model"])
     try:
@@ -399,8 +417,54 @@ def review(image_path, request, prompt, settings=None):
     except Exception:
         return None
     better = str(verdict.get("prompt") or "").strip()
-    ok = bool(verdict.get("ok")) or not better
-    return {"ok": ok, "problem": "" if ok else clean(str(verdict.get("problem") or "")), "prompt": better}
+    colors = clean_colors(verdict.get("colors"))
+    targets = clean_targets(verdict.get("targets"))
+    # Перефарбування можливе, лише якщо Критик сказав, що саме і в які кольори
+    fix = "recolor" if verdict.get("fix") == "recolor" and colors and targets else "redraw"
+    ok = bool(verdict.get("ok")) or (fix == "redraw" and not better)
+    return {
+        "ok": ok,
+        "problem": "" if ok else clean(str(verdict.get("problem") or "")),
+        "prompt": better,
+        "fix": fix,
+        "targets": targets if fix == "recolor" else [],
+        "colors": colors if fix == "recolor" else [],
+    }
+
+
+COMPARE_FORMAT = {
+    "type": "object",
+    "properties": {"better": {"type": "integer", "enum": [1, 2]}, "why": {"type": "string"}},
+    "required": ["better", "why"],
+}
+
+
+def compare(first_path, second_path, request, settings=None):
+    """Критик дивиться на два варіанти одного прохання. Повертає 1 або 2 (кращий), або None, якщо не вдалося."""
+    settings = settings or level(DEFAULT_REASONING)
+    release_others(settings["model"])
+    try:
+        response = chat_with_retry(
+            model=settings["model"],
+            messages=[
+                {"role": "system", "content": identity() + "\nТи порівнюєш два варіанти картинки на одне прохання "
+                 "і чесно обираєш той, що краще його виконує і має менше вад. Відповідай JSON "
+                 '{"better": 1 або 2, "why": "коротко чому, українською"}, без емодзі.'},
+                {
+                    "role": "user",
+                    "content": f"Прохання користувача: {request}\nПерше зображення - варіант 1, друге - варіант 2.",
+                    "images": [Path(first_path).read_bytes(), Path(second_path).read_bytes()],
+                },
+            ],
+            format=COMPARE_FORMAT,
+            think=settings["think"],
+            keep_alive=KEEP_ALIVE,
+            options={"temperature": 0},
+        )
+        better = json.loads(response["message"]["content"]).get("better")
+    except Exception:
+        return None
+    return better if better in (1, 2) else None
 
 
 LEARN_FORMAT = {

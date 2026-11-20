@@ -1510,7 +1510,9 @@ class LinumApp(ctk.CTk):
         if message.get("review"):
             # Gaia перевірила перший варіант, знайшла проблему і перемалювала
             SelectableText(
-                card, t("review_redrawn").format(problem=message["review"]), self.font(12),
+                card, t({"recolor": "review_recolored"}.get(message.get("fix"), "review_kept_first"
+                        if message.get("kept_first") else "review_redrawn")).format(problem=message["review"]),
+                self.font(12),
                 max_width=IMAGE_SIZE - 10, text_color=theme.MUTED, bg=theme.SURFACE,
             ).pack(anchor="w", padx=14, pady=(2, 2))
 
@@ -2058,6 +2060,9 @@ class LinumApp(ctk.CTk):
             nonlocal english, language, steps, box, seed, colors
             review = None
             first_image = None
+            # Як Критик виправив помилку: "recolor" або "redraw"; і другий варіант, якщо лишили перший
+            fixed_by = None
+            second_image = None
             first_prompt = None
             try:
                 from src.ai.generator import edit_image, generate_image, save_image
@@ -2133,8 +2138,9 @@ class LinumApp(ctk.CTk):
                     path, steps = draw(full_prompt, seed)
 
                 if settings["check"] and unload_brain and not recolored:
-                    # Gaia дивиться на готову картинку. Якщо вийшло не те, перемальовує один раз
-                    # за її виправленим описом. Художника спершу прибираємо з відеопам'яті.
+                    # Критик дивиться на готову картинку. Якщо вийшло не те, виправляє один раз:
+                    # помилку лише в кольорах перефарбовує, а решту перемальовує і потім
+                    # порівнює два варіанти, щоб показати кращий. Художника спершу прибираємо з відеопам'яті.
                     from src.ai import brain
 
                     free_gpu_memory()
@@ -2144,12 +2150,38 @@ class LinumApp(ctk.CTk):
                         review = verdict["problem"]
                         first_image = path
                         first_prompt = english
-                        brain.unload()
-                        self.after(0, self._set_pending_title, t("redrawing"))
-                        english = verdict["prompt"]
-                        full_prompt = f"{english}, {STYLES[style]}" if STYLES.get(style) else english
-                        seed = random.randint(0, 2**31 - 1)
-                        path, steps = draw(full_prompt, seed)
+                        if verdict["fix"] == "recolor":
+                            # Кольори: точно і за секунди, сама картинка лишається та сама
+                            from src.ai.recolor import recolor
+                            from src.ai.segmenter import find_mask
+
+                            self.after(0, self._set_pending_title, t("recoloring"))
+                            fix_box = brain.locate(path, verdict["targets"][0], "", model=settings["model"])
+                            brain.unload()
+                            fix_mask, _ = find_mask(path, verdict["targets"], box=fix_box)
+                            if fix_mask is not None:
+                                with Image.open(path) as picture:
+                                    recolored_path = save_image(recolor(picture, fix_mask, verdict["colors"]))
+                                # Перефарбування теж може зіпсувати картинку (якщо Критик помилився
+                                # і предмет не той): лишаємо його, лише якщо Критик визнав його кращим
+                                self.after(0, self._set_pending_title, t("comparing"))
+                                if brain.compare(first_image, recolored_path, prompt, settings) == 2:
+                                    path = recolored_path
+                                    fixed_by = "recolor"
+                        if fixed_by is None:
+                            brain.unload()
+                            self.after(0, self._set_pending_title, t("redrawing"))
+                            english = verdict["prompt"] or english
+                            full_prompt = f"{english}, {STYLES[style]}" if STYLES.get(style) else english
+                            seed = random.randint(0, 2**31 - 1)
+                            path, steps = draw(full_prompt, seed)
+                            fixed_by = "redraw"
+                            # Перемальоване не завжди краще: Критик порівнює обидва варіанти
+                            free_gpu_memory()
+                            self.after(0, self._set_pending_title, t("comparing"))
+                            if brain.compare(first_image, path, prompt, settings) == 1:
+                                second_image = path
+                                path, english = first_image, first_prompt
             except Exception as error:
                 self.after(0, self._on_generate_failed, error)
                 return
@@ -2175,6 +2207,11 @@ class LinumApp(ctk.CTk):
                     message["review"] = review
                     message["first_image"] = str(first_image)
                     message["first_prompt"] = first_prompt
+                    message["fix"] = fixed_by
+                    if second_image is not None:
+                        # Перемальований варіант вийшов гіршим, тож показуємо перший
+                        message["kept_first"] = True
+                        message["second_image"] = str(second_image)
             if source is not None:
                 message["source"] = str(source)
                 message["strength"] = strength
