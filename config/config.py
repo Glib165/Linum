@@ -1,7 +1,7 @@
 # почнемо писати код для конфігураційного файлу config.py
 
 APP_NAME = "Linum"
-APP_VERSION = "1.0"
+APP_VERSION = "1.1"
 IMAGE_WIDTH = 512
 IMAGE_HEIGHT = 512
 OUTPUTS_DIR = "outputs/generated"
