@@ -16,8 +16,6 @@ data/datasets/*
 
 # Personal app data: chats and settings
 data/chats.json
-data/lessons.json
-data/lessons.tmp
 data/memory.json
 data/memory.tmp
 data/training_log.json
@@ -25,6 +23,8 @@ data/training_log.tmp
 data/chats.tmp
 config/settings.json
 config/settings.tmp
+# Позначка режиму розробника: лише на комп'ютері розробника
+config/developer
 
 # Logs and secrets
 logs/*

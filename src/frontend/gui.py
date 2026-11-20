@@ -32,6 +32,7 @@ from config.config import (
     STYLES,
     REASONING,
     DEFAULT_REASONING,
+    DEVELOPER,
 )
 from src.backend.services.chat_store import ChatStore
 from src.backend.services.settings_store import SettingsStore
@@ -154,6 +155,11 @@ def free_gpu_memory():
         torch.cuda.empty_cache()
 
 
+class Cancelled(Exception):
+    # Користувач натиснув "Стоп": малювання обривається на найближчому кроці
+    pass
+
+
 def torch_out_of_memory():
     # Клас помилки "не вистачило відеопам'яті" з PyTorch
     import torch
@@ -193,6 +199,10 @@ class LinumApp(ctk.CTk):
         # Черга уроків: картинки, з яких Gaia ще має зробити урок (оцінені або з помилкою від Критика)
         self.lesson_queue = []
         self.learning = False
+        # Кнопка "Стоп": номер поточної справи (відповідь чи малювання) і прохання її зупинити.
+        # Результат справи, яку вже зупинили, приходить пізніше з іншим номером і просто ігнорується.
+        self.job_id = 0
+        self.cancel_requested = False
         # Тренування агентів (сторінка "Досвід")
         self.training = False
         self.training_stop = False
@@ -679,7 +689,7 @@ class LinumApp(ctk.CTk):
             hover_color=theme.ACCENT_HOVER,
             text_color=theme.ACCENT_TEXT,
             text_color_disabled=theme.MUTED,
-            command=self.on_generate,
+            command=self.on_send_button,
         )
         self.send_button.pack(side="right")
         # Модель і рівень міркувань: одна кнопка, яка відкриває віконце з повзунком
@@ -1555,8 +1565,8 @@ class LinumApp(ctk.CTk):
                 corner_radius=8, font=self.font(12), fg_color="transparent", hover_color=theme.SURFACE_HOVER,
                 text_color=theme.TEXT, command=lambda m=message: self.upscale_image(m),
             ).pack(side="left", padx=(0, 4))
-        if message.get("kind") == "image" and path.exists():
-            # Оцінка: з неї Linum робить урок і вчиться
+        if DEVELOPER and message.get("kind") == "image" and path.exists():
+            # Оцінка: з неї Linum робить урок і вчиться (лише в режимі розробника)
             buttons = {}
             for name, rated in (("thumb_up", 1), ("thumb_down", -1)):
                 buttons[name] = ctk.CTkButton(
@@ -1710,6 +1720,9 @@ class LinumApp(ctk.CTk):
     def _set_busy(self, busy, generating=False):
         self.busy = busy
         self.generating = busy and generating
+        if busy:
+            self.job_id += 1
+            self.cancel_requested = False
         state = "disabled" if busy else "normal"
         self.send_button.configure(state="normal" if not busy and self.pipe is not None else "disabled")
         for widget in (self.brain_button, self.style_menu, self.size_menu):
@@ -1809,6 +1822,7 @@ class LinumApp(ctk.CTk):
         self._add_pending_card(width * scale, height * scale)
         self.pending["title"].configure(text=t("upscaling").format(scale=scale))
         self._scroll_to_bottom()
+        job = self.job_id
 
         def work():
             try:
@@ -1826,9 +1840,14 @@ class LinumApp(ctk.CTk):
                         brain.unload()
                         free_gpu_memory()
                         bigger = upscale(picture, scale)
+                if self.cancel_requested:
+                    raise Cancelled()
                 new_path = save_image(bigger)
+            except Cancelled:
+                self.after(0, self._deliver, job, self._on_stopped)
+                return
             except Exception as error:
-                self.after(0, self._on_generate_failed, error)
+                self.after(0, self._deliver, job, self._on_generate_failed, error)
                 return
             copy = {key: value for key, value in message.items()
                     if key not in ("rating", "review", "checked", "first_image", "second_image", "kept_first")}
@@ -1840,7 +1859,7 @@ class LinumApp(ctk.CTk):
                 "seconds": round(time.time() - started),
                 "created": datetime.now().isoformat(timespec="seconds"),
             })
-            self.after(0, self._on_generated, chat_id, copy)
+            self.after(0, self._deliver, job, self._on_generated, chat_id, copy)
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -1860,7 +1879,10 @@ class LinumApp(ctk.CTk):
         self.set_status(t("thanks_lesson") if message.get("rating") else t("rating_removed"))
 
     def queue_lesson(self, message, liked):
-        # liked: True/False - оцінка користувача; None - помилку знайшов Критик під час перевірки
+        # liked: True/False - оцінка користувача; None - помилку знайшов Критик під час перевірки.
+        # Навчати Linum може лише розробник: у звичайних користувачів уроки не записуються.
+        if not DEVELOPER:
+            return
         if not Path(message.get("image", "")).exists():
             return
         self.lesson_queue.append((message, liked))
@@ -1897,6 +1919,8 @@ class LinumApp(ctk.CTk):
         self._run_lessons()
 
     def toggle_training(self):
+        if not DEVELOPER:
+            return
         if self.training:
             # Зупиняємо між кроками: поточний крок агентів доробиться
             self.training_stop = True
@@ -1962,6 +1986,42 @@ class LinumApp(ctk.CTk):
         if self.view == "settings":
             # Оновлюємо сторінку, щоб з'явились нові уроки
             self.open_settings("experience")
+
+    def on_send_button(self):
+        # Одна кнопка на дві дії: коли Linum вільний, надсилає, коли зайнятий, зупиняє
+        if self.busy:
+            self.stop_current()
+        else:
+            self.on_generate()
+
+    def stop_current(self):
+        if self.training:
+            self.toggle_training()
+            return
+        if not self.busy:
+            return
+        if self.pending is None:
+            # Gaia ще думає: зупиняємо одразу, а її запізнілу відповідь відкинемо
+            self.job_id += 1
+            self._on_stopped()
+        else:
+            # Художник малює: він зупиниться на найближчому кроці
+            self.cancel_requested = True
+            self.set_status(t("stopping"))
+
+    def _deliver(self, job, handler, *args):
+        # Передає результат фонової справи, лише якщо її не зупинили
+        if job == self.job_id:
+            handler(*args)
+
+    def _on_stopped(self):
+        self._remove_thinking()
+        if self.pending is not None:
+            self.pending["row"].destroy()
+            self.pending = None
+        self._set_busy(False)
+        self.set_status(t("stopped"))
+        self.prompt_entry.focus_set()
 
     def on_generate(self, event=None):
         prompt = self.prompt_entry.get().strip()
@@ -2068,6 +2128,7 @@ class LinumApp(ctk.CTk):
         self._scroll_to_bottom()
         self._set_busy(True, generating=True)
         settings = self.reasoning()
+        job = self.job_id
         # Мозок відповідає від імені обраної моделі (Cygnus 2.0, Fornax 1.0...)
         model_name = self.model_title(self.selected_model or DEFAULT_MODEL)
         self.set_status(t("linum_reasoning") if settings["think"] else t("linum_thinking"))
@@ -2081,9 +2142,9 @@ class LinumApp(ctk.CTk):
                 free_gpu_memory()
                 decision = brain.decide(brain.history_from_chat(history_messages), settings, model_name)
             except Exception as error:
-                self.after(0, self._on_brain_failed, chat_id, text, error)
+                self.after(0, self._deliver, job, self._on_brain_failed, chat_id, text, error)
                 return
-            self.after(0, self._on_decided, chat_id, text, decision)
+            self.after(0, self._deliver, job, self._on_decided, chat_id, text, decision)
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -2209,11 +2270,19 @@ class LinumApp(ctk.CTk):
         started = time.time()
         settings = self.reasoning()
         style_text = self.styles().get(style, "")
+        job = self.job_id
         self._set_busy(True, generating=True)
         self.set_status(t("creating_with_model").format(model=self.model_title(model)))
 
         def on_step(step, total):
+            if self.cancel_requested:
+                raise Cancelled()
             self.after(0, self._update_progress, step, total)
+
+        def check_cancel():
+            # Між етапами (пошук, малювання, перевірка) теж дивимося, чи не натиснули "Стоп"
+            if self.cancel_requested:
+                raise Cancelled()
 
         def work():
             nonlocal english, language, steps, box, seed, colors
@@ -2313,6 +2382,7 @@ class LinumApp(ctk.CTk):
                 else:
                     path, steps = draw(full_prompt, seed)
 
+                check_cancel()
                 if settings["check"] and unload_brain and not recolored:
                     # Критик дивиться на готову картинку. Якщо вийшло не те, виправляє один раз:
                     # помилку лише в кольорах перефарбовує, а решту перемальовує і потім
@@ -2322,6 +2392,7 @@ class LinumApp(ctk.CTk):
                     free_gpu_memory()
                     self.after(0, self._set_pending_title, t("checking_result"))
                     verdict = brain.review(path, prompt, english, settings)
+                    check_cancel()
                     if verdict is not None and not verdict["ok"]:
                         review = verdict["problem"]
                         first_image = path
@@ -2358,8 +2429,11 @@ class LinumApp(ctk.CTk):
                             if brain.compare(first_image, path, prompt, settings) == 1:
                                 second_image = path
                                 path, english = first_image, first_prompt
+            except Cancelled:
+                self.after(0, self._deliver, job, self._on_stopped)
+                return
             except Exception as error:
-                self.after(0, self._on_generate_failed, error)
+                self.after(0, self._deliver, job, self._on_generate_failed, error)
                 return
             message = {
                 "prompt": prompt,
@@ -2408,7 +2482,7 @@ class LinumApp(ctk.CTk):
                     message["target_found"] = box is not None
                     if box is not None:
                         message["box"] = [round(value) for value in box]
-            self.after(0, self._on_generated, chat_id, message)
+            self.after(0, self._deliver, job, self._on_generated, chat_id, message)
 
         threading.Thread(target=work, daemon=True).start()
         return True
@@ -2667,7 +2741,7 @@ class LinumApp(ctk.CTk):
             ("general", t("general")),
             ("appearance", t("appearance")),
             ("generation", t("generation")),
-            ("experience", t("experience")),
+            *((("experience", t("experience")),) if DEVELOPER else ()),
             ("memory", t("memory")),
             ("storage", t("storage")),
             ("about", t("about")),
