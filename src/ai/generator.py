@@ -5,12 +5,12 @@ from pathlib import Path
 
 import torch
 from PIL import Image, ImageFilter
-from diffusers import AutoencoderKL, DPMSolverMultistepScheduler, StableDiffusionPipeline, StableDiffusionInpaintPipeline 
+from diffusers import AutoencoderKL, LCMScheduler, DPMSolverMultistepScheduler, StableDiffusionPipeline, StableDiffusionInpaintPipeline 
 
 from config.config import MODELS, DEFAULT_MODEL, GUIDANCE_SCALE, IMAGE_WIDTH, IMAGE_HEIGHT, OUTPUTS_DIR
 
 
-def load_pipeline(model_path, vae_name=None):
+def load_pipeline(model_path, vae_name=None, lora=None):
     pipe = StableDiffusionPipeline.from_single_file(model_path, torch_dtype=torch.float32)
     # Деякі моделі краще працюють з окремим покращеним декодером кольорів (VAE)
     if vae_name:
@@ -21,6 +21,10 @@ def load_pipeline(model_path, vae_name=None):
     pipe.scheduler = DPMSolverMultistepScheduler.from_config(
         pipe.scheduler.config, use_karras_sigmas=True, algorithm_type="dpmsolver++"
     )
+    if lora: 
+        pipe.load_lora_weights(lora)
+        pipe.fuse_lora()
+        pipe.scheduler = LCMScheduler.from_config(pipe.scheduler.config)
     pipe.enable_model_cpu_offload()
     pipe.enable_attention_slicing()
     return pipe
@@ -28,7 +32,7 @@ def load_pipeline(model_path, vae_name=None):
 
 def load_model(model_name):
     model = MODELS[model_name]
-    return load_pipeline(model["path"], model.get("vae"))
+    return load_pipeline(model["path"], model.get("vae"), model.get("lora"))
 
 
 def generate_image(
@@ -62,7 +66,7 @@ def generate_image(
         width=width,
         height=height,
         num_inference_steps=steps,
-        guidance_scale=GUIDANCE_SCALE,
+        guidance_scale=MODELS[model_name].get("guidance", GUIDANCE_SCALE),
         generator=generator,
         callback_on_step_end=step_callback,
     ).images[0]
@@ -188,7 +192,7 @@ def edit_image(pipe, image_path, prompt, mask=None, strength=0.6,
         height=height,
         strength=strength,
         num_inference_steps=steps,
-        guidance_scale=GUIDANCE_SCALE,
+        guidance_scale=MODELS[model_name].get("guidance", GUIDANCE_SCALE),
         generator=generator,
         callback_on_step_end=step_callback,
     ).images[0]

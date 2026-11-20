@@ -1,7 +1,7 @@
 # почнемо писати код для конфігураційного файлу config.py
 
 APP_NAME = "Linum"
-APP_VERSION = "0.5 beta"
+APP_VERSION = "1.0"
 IMAGE_WIDTH = 512
 IMAGE_HEIGHT = 512
 OUTPUTS_DIR = "outputs/generated"
@@ -9,7 +9,7 @@ OUTPUTS_DIR = "outputs/generated"
 UPLOADS_DIR = "data/uploads"
 
 MODELS = {
-    "Fornax": {"steps": 15, "path": "models/checkpoints/fornax_model.safetensors"},
+    "Fornax": {"steps": 6, "path": "models/checkpoints/dreamshaper_8.safetensors", "lora": "latent-consistency/lcm-lora-sdv1-5", "guidance": 1.5},
     "Gaia": {"steps": 25, "path": "models/checkpoints/dreamshaper_8.safetensors"},
     "Cygnus": {"steps": 30, "path": "models/checkpoints/realistic_vision_v6.safetensors", "vae": "stabilityai/sd-vae-ft-mse"},
 }
