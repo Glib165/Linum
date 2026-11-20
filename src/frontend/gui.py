@@ -496,9 +496,7 @@ class LinumApp(ctk.CTk):
         self.avatar.grid(row=0, column=0, padx=(6, 0), pady=6)
         self.profile_name = ctk.CTkLabel(profile, text="", font=self.font(14), text_color=theme.TEXT, anchor="w")
         self.profile_name.grid(row=0, column=1, sticky="ew", padx=(10, 0))
-        chevron = ctk.CTkLabel(profile, text="⌃", font=self.font(13), text_color=theme.MUTED)
-        chevron.grid(row=0, column=2, padx=(0, 10))
-        for widget in (profile, self.avatar, self.profile_name, chevron):
+        for widget in (profile, self.avatar, self.profile_name):
             widget.bind("<Button-1>", self.toggle_account_menu)
             widget.bind("<Enter>", lambda event: profile.configure(fg_color=theme.SURFACE_HOVER))
             widget.bind("<Leave>", lambda event: profile.configure(fg_color="transparent"))
@@ -1827,7 +1825,7 @@ class LinumApp(ctk.CTk):
         # Текст кнопки в полі вводу: художня модель і рівень міркувань
         level = self.settings.get("reasoning")
         level = level if level in REASONING else DEFAULT_REASONING
-        self.brain_button.configure(text=f"{self.selected_model or DEFAULT_MODEL}  ·  {level}   ⌃")
+        self.brain_button.configure(text=f"{self.selected_model or DEFAULT_MODEL}  ·  {level}")
 
     def toggle_brain_popup(self):
         from src.frontend.brain_popup import BrainPopup
