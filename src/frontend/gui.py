@@ -249,7 +249,10 @@ class LinumApp(ctk.CTk):
             self.set_status("Не знайдено жодного файлу моделі. Покладіть його в models/checkpoints")
         else:
             self.select_model(first_model)
-        self._check_brain()
+        # Перевірку мозку запускаємо, коли вікно вже працює. Якщо Ollama відповість раніше,
+        # ніж вікно запуститься, фонова перевірка не зможе передати результат вікну, і Linum
+        # вирішить, що мозку немає, та малюватиме без Gaia.
+        self.after(300, self._check_brain)
         self._prepare_spinner()
 
         self.bind("<Control-n>", lambda event: self.new_chat())
