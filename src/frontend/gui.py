@@ -165,6 +165,7 @@ class LinumApp(ctk.CTk):
         self.pipe = None
         self.loaded_model = None
         self.selected_model = None
+        self.model_tiers = MODEL_TIERS
         # busy: модель вантажиться або створює картинку, тому кнопку "створити" вимкнено.
         # generating: саме створюється картинка, тоді не можна і переходити між екранами.
         self.busy = False
@@ -243,7 +244,7 @@ class LinumApp(ctk.CTk):
 
         first_model = self._initial_model()
         if first_model is None:
-            self.model_menu.set(DEFAULT_MODEL)
+            self.update_brain_button()
             self.send_button.configure(state="disabled")
             self.set_status("Не знайдено жодного файлу моделі. Покладіть його в models/checkpoints")
         else:
@@ -649,13 +650,6 @@ class LinumApp(ctk.CTk):
         self.size_menu.set(self.settings.get("size") if self.settings.get("size") in SIZES else "Квадрат 1:1")
         self.size_menu.pack(side="left")
 
-        # Рівень міркувань Gaia: можна міняти перед кожним повідомленням
-        ctk.CTkLabel(tools, image=self.small_icons["bulb"], text="").pack(side="left", padx=(10, 0))
-        self.reasoning_menu = ctk.CTkOptionMenu(
-            tools, values=list(REASONING.keys()), command=self.set_reasoning, **self.menu_style()
-        )
-        self.reasoning_menu.set(self.settings.get("reasoning") if self.settings.get("reasoning") in REASONING else DEFAULT_REASONING)
-        self.reasoning_menu.pack(side="left")
 
         self.send_button = ctk.CTkButton(
             tools,
@@ -671,13 +665,15 @@ class LinumApp(ctk.CTk):
             command=self.on_generate,
         )
         self.send_button.pack(side="right")
-        self.model_tier_label = ctk.CTkLabel(tools, text="", font=self.font(12), text_color=theme.MUTED)
-        self.model_tier_label.pack(side="right", padx=(0, 12))
-        self.model_menu = ctk.CTkOptionMenu(
-            tools, values=list(MODELS.keys()), command=self.select_model, **self.menu_style()
+        # Модель і рівень міркувань: одна кнопка, яка відкриває віконце з повзунком
+        self.brain_popup = None
+        self.brain_button = ctk.CTkButton(
+            tools, text="", image=self.small_icons["model"], compound="left", width=0, height=30,
+            corner_radius=8, font=self.font(13), fg_color="transparent", hover_color=theme.SURFACE_HOVER,
+            text_color=theme.TEXT, text_color_disabled=theme.MUTED, command=self.toggle_brain_popup,
         )
-        self.model_menu.pack(side="right")
-        ctk.CTkLabel(tools, image=self.small_icons["model"], text="").pack(side="right")
+        self.brain_button.pack(side="right", padx=(0, 10))
+        self.update_brain_button()
 
         self.status_label = ctk.CTkLabel(
             self.composer_block, text=LANGUAGE_HINT, font=self.font(12), text_color=theme.MUTED, anchor="w"
@@ -1612,15 +1608,12 @@ class LinumApp(ctk.CTk):
 
     def select_model(self, name):
         if self.busy:
-            self.model_menu.set(self.selected_model or name)
             return
         if not self.model_available(name):
-            self.model_menu.set(self.selected_model or name)
             self.set_status(f"Модель {name} ще не додана. Покладіть файл сюди: {MODELS[name]['path']}")
             return
         self.selected_model = name
-        self.model_menu.set(name)
-        self.model_tier_label.configure(text=MODEL_TIERS.get(name, ""))
+        self.update_brain_button()
         self.settings.set("model", name)
         if name != self.loaded_model:
             self._load_model_async(name)
@@ -1684,8 +1677,10 @@ class LinumApp(ctk.CTk):
         self.generating = busy and generating
         state = "disabled" if busy else "normal"
         self.send_button.configure(state="normal" if not busy and self.pipe is not None else "disabled")
-        for widget in (self.model_menu, self.style_menu, self.size_menu, self.reasoning_menu):
+        for widget in (self.brain_button, self.style_menu, self.size_menu):
             widget.configure(state=state)
+        if busy and self.brain_popup is not None:
+            self.brain_popup.close()
         # Переходити між екранами не можна лише під час створення картинки
         navigation = "disabled" if self.generating else "normal"
         for widget in (self.nav_buttons["new"], self.nav_buttons["gallery"], self.delete_button, *self.chat_buttons):
@@ -1824,9 +1819,23 @@ class LinumApp(ctk.CTk):
     def set_reasoning(self, value):
         # Зміна рівня з поля вводу або з налаштувань: запам'ятовуємо і показуємо однаково в обох місцях
         self.settings.set("reasoning", value)
-        self.reasoning_menu.set(value)
+        self.update_brain_button()
         # У нового рівня може бути інша модель: перевіряємо, чи вона є, і завантажуємо її
         self._check_brain()
+
+    def update_brain_button(self):
+        # Текст кнопки в полі вводу: художня модель і рівень міркувань
+        level = self.settings.get("reasoning")
+        level = level if level in REASONING else DEFAULT_REASONING
+        self.brain_button.configure(text=f"{self.selected_model or DEFAULT_MODEL}  ·  {level}   ⌃")
+
+    def toggle_brain_popup(self):
+        from src.frontend.brain_popup import BrainPopup
+
+        if self.brain_popup is not None:
+            self.brain_popup.close()
+        elif not self.busy:
+            self.brain_popup = BrainPopup(self, self.brain_button)
 
     def reasoning(self):
         # Налаштування вибраного рівня міркувань: {"model", "think", "check"}
