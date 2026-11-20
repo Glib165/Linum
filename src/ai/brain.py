@@ -47,6 +47,9 @@ RULES = """
   "bottom-left", "bottom-right". Подивись на зображення. Якщо предмет займає майже все фото або "targets" порожній, "".
 - "remove": true, якщо цей предмет треба прибрати. Тоді "prompt" описує, що має бути на його місці
   (фон, підлога, небо), наприклад "empty grey studio floor, soft shadow". Інакше false.
+- "add": true, якщо треба ДОДАТИ новий предмет, якого на фото ще немає ("додай кота на диван").
+  Тоді "targets" порожній, а "prompt" описує все фото вже з новим предметом. Інакше false.
+- "place": тільки для "add": куди додати, коротко англійською ("on this sofa", "in the sky"). Інакше "".
 - "colors": тільки для "edit", коли треба ЛИШЕ змінити колір предмета, а форма і все інше лишаються
   (перефарбувати, поміняти кольори місцями). Список змін {"from": ..., "to": ...}, кольори у форматі "#RRGGBB".
   "from" - колір, який ЗАРАЗ є на предметі (подивись на фото), або "", якщо весь предмет стає одного кольору.
@@ -103,6 +106,8 @@ DECISION_FORMAT = {
         "targets": {"type": "array", "items": {"type": "string"}},
         "where": {"type": "string", "enum": ["", *WHERE]},
         "remove": {"type": "boolean"},
+        "add": {"type": "boolean"},
+        "place": {"type": "string"},
         "colors": {
             "type": "array",
             "items": {
@@ -116,7 +121,7 @@ DECISION_FORMAT = {
             },
         },
     },
-    "required": ["action", "reply", "prompt", "strength", "targets", "where", "remove", "colors"],
+    "required": ["action", "reply", "prompt", "strength", "targets", "where", "remove", "colors", "add", "place"],
 }
 
 # Рамка предмета: [верх, лівий край, низ, правий край] у частках від 0 до 1000.
@@ -285,7 +290,7 @@ def decide(history, settings=None):
         decision = json.loads(response["message"]["content"])
     except json.JSONDecodeError:
         return {"action": "chat", "reply": clean(response["message"]["content"]), "prompt": "", "strength": 0,
-                "targets": [], "where": "", "remove": False, "colors": []}
+                "targets": [], "where": "", "remove": False, "colors": [], "add": False, "place": ""}
 
     action = decision.get("action")
     if action not in ("chat", "image", "edit"):
@@ -306,6 +311,8 @@ def decide(history, settings=None):
         "targets": clean_targets(decision.get("targets")) if action == "edit" else [],
         "where": decision.get("where") if decision.get("where") in WHERE and action == "edit" else "",
         "remove": bool(decision.get("remove")) and action == "edit",
+        "add": bool(decision.get("add")) and action == "edit",
+        "place": str(decision.get("place") or "") if action == "edit" else "",
         "colors": clean_colors(decision.get("colors")) if action == "edit" and not decision.get("remove") else [],
     }
 

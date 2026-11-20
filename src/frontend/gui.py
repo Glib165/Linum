@@ -1529,7 +1529,9 @@ class LinumApp(ctk.CTk):
             details.append(t("upscaled").format(scale=message["upscaled"]))
         if message.get("checked") and not message.get("review"):
             details.append(t("checked"))
-        if message.get("recolored"):
+        if message.get("add"):
+            details.append(t("added_to").format(place=message.get("place") or "") if message.get("target_found") else t("photo_edit"))
+        elif message.get("recolored"):
             details.append(t("recolored_target").format(target=message["target"]) if message.get("target") else t("recolored"))
         elif message.get("target") and message.get("target_found"):
             details.append(t("removed_target" if message.get("remove") else "changed_target").format(target=message["target"]))
@@ -1624,6 +1626,8 @@ class LinumApp(ctk.CTk):
             colors=message.get("colors"),
             box=tuple(message["box"]) if message.get("box") else None,
             vary=True,
+            add=bool(message.get("add")),
+            place=message.get("place", ""),
         )
 
     # ---------- Моделі ----------
@@ -2061,6 +2065,8 @@ class LinumApp(ctk.CTk):
             where=decision["where"] if source else "",
             remove=decision["remove"] if source else False,
             colors=decision["colors"] if source else None,
+            add=decision["add"] if source else False,
+            place=decision["place"] if source else "",
         )
 
     def last_image(self, chat_id):
@@ -2080,7 +2086,7 @@ class LinumApp(ctk.CTk):
 
     def start_generation(self, prompt, english=None, language=None, style=None, size=None,
                          show_bubble=True, kind=None, source=None, strength=None, unload_brain=False,
-                         targets=None, where="", remove=False, colors=None, box=None, vary=False):
+                         targets=None, where="", remove=False, colors=None, box=None, vary=False, add=False, place=""):
         # source: шлях до фото, яке треба змінити. Без нього малюється нове зображення.
         # targets: англійські назви предмета, який треба знайти на фото і змінити лише його.
         # remove: прибрати цей предмет (місце заливається фоном і домальовується).
@@ -2145,6 +2151,11 @@ class LinumApp(ctk.CTk):
                         # Поки Gaia ще в пам'яті, просимо її показати рамкою, де предмет
                         self.after(0, self._set_pending_title, t("searching_for").format(target=targets[0]))
                         box = brain.locate(source, targets[0], where, model=settings["model"])
+                    elif source is not None and add and box is None:
+                        # Додати предмет: Gaia показує рамкою місце, де він має з'явитися
+                        self.after(0, self._set_pending_title, t("looking_for_place").format(place=place or "..."))
+                        box = brain.locate(source, f"area {place} where a new object can be placed", where,
+                                           model=settings["model"])
                     # Мозок і художник разом не вміщаються в пам'ять, тому мозок на час малювання вивантажуємо
                     brain.unload()
                 if english is None:
@@ -2181,6 +2192,18 @@ class LinumApp(ctk.CTk):
                         else:
                             # Зміна одного предмета потребує сильнішого перемальовування
                             edit_strength = max(strength or 0.55, 0.7)
+                if source is not None and add and box is not None:
+                    # Додаємо предмет: художник малює лише в рамці, яку показала Gaia.
+                    # Маска овальна і з м'яким краєм, щоб новий предмет не виглядав вклеєним прямокутником.
+                    from PIL import ImageFilter
+
+                    with Image.open(source) as original:
+                        mask = Image.new("L", original.size, 0)
+                    ImageDraw.Draw(mask).ellipse(box, fill=255)
+                    mask = mask.filter(ImageFilter.GaussianBlur(4)).point(lambda value: 255 if value > 100 else 0)
+                    self.after(0, self._set_pending_title, t("adding"))
+                    # Новий предмет потребує майже повного перемальовування місця
+                    edit_strength = 0.9
                 def draw(text, seed):
                     # Малює нове зображення або змінює фото. Повертає (шлях, кроки).
                     if source is None:
@@ -2296,6 +2319,12 @@ class LinumApp(ctk.CTk):
                 if colors:
                     message["colors"] = colors
                     message["recolored"] = recolored
+                if add:
+                    message["add"] = True
+                    message["place"] = place
+                    message["target_found"] = box is not None
+                    if box is not None:
+                        message["box"] = [round(value) for value in box]
             self.after(0, self._on_generated, chat_id, message)
 
         threading.Thread(target=work, daemon=True).start()
