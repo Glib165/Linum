@@ -1931,6 +1931,8 @@ class LinumApp(ctk.CTk):
                     log(t("round_error").format(error=shorten(str(error), 160)))
                     break
                 rounds += 1
+                trainer.record_round(result)
+                self.after(0, self._refresh_experience)
                 if result.get("lesson"):
                     learned += 1
                     log(t("round_lesson").format(round=rounds, text=result["lesson"]["text"]))
@@ -1941,6 +1943,11 @@ class LinumApp(ctk.CTk):
             self.after(0, self._on_training_done, rounds, learned)
 
         threading.Thread(target=work, daemon=True).start()
+
+    def _refresh_experience(self):
+        # Сторінка "Досвід" показує свіжі уроки і раунди одразу, без перезаходу
+        if self.view == "settings" and getattr(self, "settings_section", None) == "experience":
+            self.open_settings("experience")
 
     def _set_training_status(self, text):
         self.training_status = text
@@ -2623,6 +2630,7 @@ class LinumApp(ctk.CTk):
         if self.generating:
             self.set_status(t("wait_image"))
             return
+        self.settings_section = section
         previous = self.chats.get(self.current_chat_id)
         if previous and not previous["messages"]:
             self.chats.delete_chat(previous["id"])
@@ -2898,6 +2906,7 @@ class LinumApp(ctk.CTk):
             anchor="w", justify="left", wraplength=560,
         )
         self.training_label.pack(fill="x", pady=(0, 18))
+        self._training_rounds(content)
 
         items = lessons.load()
         if not items:
@@ -2918,6 +2927,41 @@ class LinumApp(ctk.CTk):
             when = datetime.fromisoformat(lesson["created"]).strftime("%d.%m %H:%M")
             row = self._setting_row(content, lesson["text"], f"{sources.get(lesson['source'], '')}  ·  {when}")
             self._outline_button(row, t("delete"), lambda i=lesson["id"]: forget(i), danger=True)
+
+    def _training_rounds(self, content):
+        # Останні раунди тренування: картинка, завдання і чим закінчилося
+        from src.ai import trainer
+
+        rounds = trainer.load_rounds()[-8:]
+        if not rounds:
+            return
+        ctk.CTkLabel(
+            content, text=t("training_rounds").format(count=len(trainer.load_rounds())), font=self.font(14, "bold"),
+            text_color=theme.TEXT, anchor="w",
+        ).pack(fill="x", pady=(0, 8))
+        for item in reversed(rounds):
+            row = ctk.CTkFrame(content, fg_color=theme.SURFACE, corner_radius=12)
+            row.pack(fill="x", pady=(0, 6))
+            row.grid_columnconfigure(1, weight=1)
+            picture = item.get("image") or item.get("first_image")
+            if picture and Path(picture).exists():
+                thumb = ctk.CTkLabel(row, image=self.thumbnail(picture, 56), text="", cursor="hand2")
+                thumb.grid(row=0, column=0, rowspan=2, padx=8, pady=8)
+                thumb.bind("<Button-1>", lambda event, p=picture: os.startfile(Path(p).resolve()))
+            ctk.CTkLabel(
+                row, text=item["request"], font=self.font(13), text_color=theme.TEXT, anchor="w",
+                justify="left", wraplength=470,
+            ).grid(row=0, column=1, sticky="w", padx=(4, 10), pady=(8, 0))
+            if item.get("lesson"):
+                outcome = t("round_outcome_lesson").format(problem=item["problem"], lesson=item["lesson"])
+            elif item.get("problem"):
+                outcome = t("round_outcome_fixed" if item.get("fixed") else "round_outcome_problem").format(problem=item["problem"])
+            else:
+                outcome = t("round_outcome_ok")
+            ctk.CTkLabel(
+                row, text=outcome, font=self.font(12), text_color=theme.MUTED, anchor="w", justify="left", wraplength=470,
+            ).grid(row=1, column=1, sticky="w", padx=(4, 10), pady=(0, 8))
+        ctk.CTkFrame(content, height=10, fg_color="transparent").pack()
 
     def _settings_memory(self, content):
         # Що Gaia пам'ятає про вас між чатами

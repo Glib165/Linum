@@ -14,12 +14,16 @@
 import json
 import random
 import shutil
+from datetime import datetime
 from pathlib import Path
 
 from src.ai import brain, lessons
 from src.frontend.i18n import t
 
 TRAINING_DIR = Path("outputs/training")
+# Журнал тренувань: що було в кожному раунді (видно в Налаштування -> Досвід)
+LOG_FILE = Path("data/training_log.json")
+LOG_LIMIT = 300
 
 # Теми тренувань. Найкорисніші ті, де художник найчастіше помиляється.
 TRAINING_TOPICS = [
@@ -147,4 +151,35 @@ def run_round(pipe, model_name, settings, recent, log, on_step=None, stop=lambda
     text = brain.learn(message, None, settings)
     # Записуємо лише новий урок: якщо такий уже є, Тренер просто підтвердив старий
     lesson = lessons.add(text, "training") if text and not lessons.is_known(text) else None
-    return {"request": request, "problem": problem, "fixed": fixed, "lesson": lesson, "image": second_image}
+    return {"request": request, "problem": problem, "fixed": fixed, "lesson": lesson, "image": second_image,
+            "first_image": first_image}
+
+
+def load_rounds():
+    # Усі записані раунди, від старих до нових
+    if not LOG_FILE.exists():
+        return []
+    try:
+        return json.loads(LOG_FILE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+def record_round(result):
+    """Записує раунд у журнал тренувань (лише ті, де було завдання)."""
+    if not result.get("request"):
+        return
+    rounds = load_rounds()
+    rounds.append({
+        "time": datetime.now().isoformat(timespec="seconds"),
+        "request": result["request"],
+        "problem": result.get("problem") or "",
+        "fixed": result.get("fixed"),
+        "lesson": result["lesson"]["text"] if result.get("lesson") else "",
+        "image": result.get("image") or "",
+        "first_image": result.get("first_image") or "",
+    })
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temp = LOG_FILE.with_suffix(".tmp")
+    temp.write_text(json.dumps(rounds[-LOG_LIMIT:], ensure_ascii=False, indent=2), encoding="utf-8")
+    temp.replace(LOG_FILE)
