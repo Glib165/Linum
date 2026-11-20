@@ -164,11 +164,12 @@ class BrainPopup(ctk.CTkToplevel):
         name = self.levels[index]
         ultra = name == ULTRA
         self.title_label.configure(text=label(name), text_color=ULTRA_TITLE if ultra else theme.LEVEL)
-        model = self.app.selected_model or DEFAULT_MODEL
+        key = self.app.selected_model or DEFAULT_MODEL
+        model = self.app.model_title(key)
         if ultra:
             self.subtitle.configure(text=f"{t(ULTRA_NOTE)}  ·  {model}  ›")
         else:
-            tier = self.app.model_tiers.get(model, "")
+            tier = self.app.model_tiers.get(key, "")
             self.subtitle.configure(text=f"{model}  ·  {tier}  ›" if tier else f"{model}  ›")
         self.slider_image = ctk.CTkImage(
             light_image=slider_image(index, len(self.levels), "light", ultra),
@@ -244,11 +245,11 @@ class ModelMenu(ctk.CTkToplevel):
         )
         current = app.selected_model or DEFAULT_MODEL
         tier = app.model_tiers.get(DEFAULT_MODEL, "")
-        self._item(body, t("default"), t("recommended").format(model=DEFAULT_MODEL, tier=tier), DEFAULT_MODEL, False)
+        self._item(body, t("default"), t("recommended").format(model=app.model_title(DEFAULT_MODEL), tier=tier), DEFAULT_MODEL, False)
         for name in MODELS:
             available = app.model_available(name)
             note = app.model_tiers.get(name, "") if available else t("no_model_file")
-            self._item(body, name, note, name, name == current, enabled=available)
+            self._item(body, app.model_title(name), note, name, name == current, enabled=available)
         ctk.CTkFrame(body, height=6, fg_color="transparent").pack()
 
         self.bind("<Escape>", lambda event: self.close())

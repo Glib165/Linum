@@ -266,10 +266,18 @@ def history_from_chat(messages):
     return history[-HISTORY_LIMIT:]
 
 
-def decide(history, settings=None):
+def persona(name):
+    # Ким Gaia є в цій розмові: тією моделлю, яку користувач обрав у програмі (наприклад, Cygnus 2.0)
+    return (f"ВАЖЛИВО: зараз користувач обрав у програмі модель {name}. У цій розмові ти {name}, "
+            f"модель Linum від розробників проєкту Linum. Якщо тебе питають, хто ти чи як тебе звати, "
+            f"відповідай, що ти {name}, навіть якщо вище сказано інакше.")
+
+
+def decide(history, settings=None, model_name=""):
     """Повертає рішення: {"action", "reply", "prompt", "strength", "targets", "where", "remove", "colors"}.
 
     settings: рівень міркувань з REASONING (яка модель і чи думати перед відповіддю).
+    model_name: назва обраної моделі з номером ("Cygnus 2.0"): мозок відповідає від її імені.
     """
     from src.ai import lessons
 
@@ -287,7 +295,8 @@ def decide(history, settings=None):
     last = last.split("]\n", 1)[-1][:300]  # без службової примітки про фото
     reminder = {"role": "system", "content": f"Reminder: write \"reply\" in the same language as the user's "
                                              f"last message: \"{last}\". \"prompt\" is always in English."}
-    system = identity() + "\n" + RULES + ("\n" + experience if experience else "")
+    system = identity() + ("\n" + persona(model_name) if model_name else "") + "\n" + RULES
+    system += "\n" + experience if experience else ""
     messages = [{"role": "system", "content": system}] + history + [reminder]
     response = chat_with_retry(
         model=settings["model"],

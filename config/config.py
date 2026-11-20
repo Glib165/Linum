@@ -10,10 +10,12 @@ UPLOADS_DIR = "data/uploads"
 # Найбільший розмір фото, яке користувач додає в чат (довша сторона, у пікселях)
 UPLOAD_MAX_SIZE = 2048
 
+# Моделі Linum. "version" - номер моделі, він показується поруч з назвою (Gaia 3.7).
+# Покращили модель - підніміть її номер.
 MODELS = {
-    "Fornax": {"steps": 6, "path": "models/checkpoints/dreamshaper_8.safetensors", "lora": "latent-consistency/lcm-lora-sdv1-5", "guidance": 1.5},
-    "Gaia": {"steps": 25, "path": "models/checkpoints/dreamshaper_8.safetensors"},
-    "Cygnus": {"steps": 30, "path": "models/checkpoints/realistic_vision_v6.safetensors", "vae": "stabilityai/sd-vae-ft-mse"},
+    "Fornax": {"version": "1.0", "steps": 6, "path": "models/checkpoints/dreamshaper_8.safetensors", "lora": "latent-consistency/lcm-lora-sdv1-5", "guidance": 1.5},
+    "Gaia": {"version": "3.7", "steps": 25, "path": "models/checkpoints/dreamshaper_8.safetensors"},
+    "Cygnus": {"version": "2.0", "steps": 30, "path": "models/checkpoints/realistic_vision_v6.safetensors", "vae": "stabilityai/sd-vae-ft-mse"},
 }
 
 DEFAULT_MODEL = "Gaia"

@@ -1523,7 +1523,7 @@ class LinumApp(ctk.CTk):
                 max_width=IMAGE_SIZE - 10, text_color=theme.MUTED, bg=theme.SURFACE,
             ).pack(anchor="w", padx=14, pady=(2, 2))
 
-        details = [message["model"]]
+        details = [self.model_title(message["model"])]
         if message.get("upscaled"):
             details.append(t("upscaled").format(scale=message["upscaled"]))
         if message.get("checked") and not message.get("review"):
@@ -1645,7 +1645,7 @@ class LinumApp(ctk.CTk):
         if self.busy:
             return
         if not self.model_available(name):
-            self.set_status(t("model_missing").format(name=name, path=MODELS[name]["path"]))
+            self.set_status(t("model_missing").format(name=self.model_title(name), path=MODELS[name]["path"]))
             return
         self.selected_model = name
         self.update_brain_button()
@@ -1658,7 +1658,7 @@ class LinumApp(ctk.CTk):
         self.pipe = None
         self.loaded_model = None
         self._set_busy(True)
-        self.set_status(t("loading_model").format(name=name))
+        self.set_status(t("loading_model").format(name=self.model_title(name)))
 
         def work():
             nonlocal old_pipe
@@ -1691,7 +1691,7 @@ class LinumApp(ctk.CTk):
 
     def _on_model_failed(self, name, error):
         self._set_busy(False)
-        self.set_status(t("model_load_failed").format(name=name, error=shorten(str(error), 140)))
+        self.set_status(t("model_load_failed").format(name=self.model_title(name), error=shorten(str(error), 140)))
 
     def _preload_translator(self):
         # Український перекладач готуємо заздалегідь, щоб перший запит не чекав
@@ -1978,11 +1978,16 @@ class LinumApp(ctk.CTk):
         # У нового рівня може бути інша модель: перевіряємо, чи вона є, і завантажуємо її
         self._check_brain()
 
+    def model_title(self, name):
+        # Назва моделі з номером для екрана: "Gaia" стає "Gaia 3.7"
+        version = MODELS.get(name, {}).get("version")
+        return f"{name} {version}" if version else name
+
     def update_brain_button(self):
         # Текст кнопки в полі вводу: художня модель і рівень міркувань
         level = self.settings.get("reasoning")
         level = level if level in REASONING else DEFAULT_REASONING
-        self.brain_button.configure(text=f"{self.selected_model or DEFAULT_MODEL}  ·  {label(level)}")
+        self.brain_button.configure(text=f"{self.model_title(self.selected_model or DEFAULT_MODEL)}  ·  {label(level)}")
 
     def toggle_brain_popup(self):
         from src.frontend.brain_popup import BrainPopup
@@ -2056,6 +2061,8 @@ class LinumApp(ctk.CTk):
         self._scroll_to_bottom()
         self._set_busy(True, generating=True)
         settings = self.reasoning()
+        # Мозок відповідає від імені обраної моделі (Cygnus 2.0, Fornax 1.0...)
+        model_name = self.model_title(self.selected_model or DEFAULT_MODEL)
         self.set_status(t("linum_reasoning") if settings["think"] else t("linum_thinking"))
         history_messages = list(chat["messages"])
 
@@ -2065,7 +2072,7 @@ class LinumApp(ctk.CTk):
 
                 # Художник міг лишити зайняту відеопам'ять. Віддаємо її, щоб Gaia завантажилась.
                 free_gpu_memory()
-                decision = brain.decide(brain.history_from_chat(history_messages), settings)
+                decision = brain.decide(brain.history_from_chat(history_messages), settings, model_name)
             except Exception as error:
                 self.after(0, self._on_brain_failed, chat_id, text, error)
                 return
@@ -2196,7 +2203,7 @@ class LinumApp(ctk.CTk):
         settings = self.reasoning()
         style_text = self.styles().get(style, "")
         self._set_busy(True, generating=True)
-        self.set_status(t("creating_with_model").format(model=model))
+        self.set_status(t("creating_with_model").format(model=self.model_title(model)))
 
         def on_step(step, total):
             self.after(0, self._update_progress, step, total)
@@ -2576,7 +2583,7 @@ class LinumApp(ctk.CTk):
         self.viewer_image = ctk.CTkImage(light_image=picture, dark_image=picture, size=size)
         ctk.CTkLabel(overlay, image=self.viewer_image, text="").pack(expand=True)
 
-        details = [message["model"]]
+        details = [self.model_title(message["model"])]
         if message.get("style") and message["style"] != "Без стилю":
             details.append(label(message["style"]))
         details.append(f"{source.width}×{source.height}")
@@ -2829,11 +2836,13 @@ class LinumApp(ctk.CTk):
         row = self._setting_row(content, t("model"), t("model_hint"))
         model_menu = None
 
-        def model_changed(value):
-            self.select_model(value)
-            model_menu.set(self.selected_model or value)
+        titles = {self.model_title(name): name for name in MODELS}
 
-        model_menu = self._option(row, list(MODELS.keys()), self.selected_model or DEFAULT_MODEL, model_changed)
+        def model_changed(shown):
+            self.select_model(titles[shown])
+            model_menu.set(self.model_title(self.selected_model or titles[shown]))
+
+        model_menu = self._option(row, list(titles), self.model_title(self.selected_model or DEFAULT_MODEL), model_changed)
 
         def style_changed(shown):
             self.settings.set("style", unlabel(shown, self.styles()))
@@ -2965,7 +2974,7 @@ class LinumApp(ctk.CTk):
         if torch is not None and torch.cuda.is_available():
             gpu = torch.cuda.get_device_name(0)
 
-        self._setting_row(content, t("model"), f"{self.loaded_model or DEFAULT_MODEL}: Stable Diffusion 1.5")
+        self._setting_row(content, t("model"), f"{self.model_title(self.loaded_model or DEFAULT_MODEL)}: Stable Diffusion 1.5")
         self._setting_row(content, t("gpu"), gpu)
         self._setting_row(
             content, t("work_mode"), t("work_mode_hint")
