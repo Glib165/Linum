@@ -20,6 +20,7 @@ data/lessons.json
 data/lessons.tmp
 data/memory.json
 data/memory.tmp
+data/avatar.png
 data/training_log.json
 data/training_log.tmp
 data/chats.tmp

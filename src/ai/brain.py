@@ -273,11 +273,12 @@ def persona(name):
             f"відповідай, що ти {name}, навіть якщо вище сказано інакше.")
 
 
-def decide(history, settings=None, model_name=""):
+def decide(history, settings=None, model_name="", profile=""):
     """Повертає рішення: {"action", "reply", "prompt", "strength", "targets", "where", "remove", "colors"}.
 
     settings: рівень міркувань з REASONING (яка модель і чи думати перед відповіддю).
     model_name: назва обраної моделі з номером ("Cygnus 2.0"): мозок відповідає від її імені.
+    profile: що користувач розповів про себе в профілі (ім'я, про себе), або "".
     """
     from src.ai import lessons
 
@@ -297,6 +298,8 @@ def decide(history, settings=None, model_name=""):
                                              f"last message: \"{last}\". \"prompt\" is always in English."}
     system = identity() + ("\n" + persona(model_name) if model_name else "") + "\n" + RULES
     system += "\n" + experience if experience else ""
+    if profile:
+        system += "\n" + profile
     messages = [{"role": "system", "content": system}] + history + [reminder]
     response = chat_with_retry(
         model=settings["model"],

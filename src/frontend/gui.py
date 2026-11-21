@@ -185,6 +185,12 @@ class LinumApp(ctk.CTk):
         self.settings = SettingsStore(SETTINGS_FILE)
         # Мова інтерфейсу: усі написи t(...) далі показуються нею
         set_language(self.settings.get("language"))
+        # Раніше ім'я і прізвище писалися в одне поле. Тепер для прізвища є своє.
+        full = self.settings.get("name").strip()
+        if " " in full and not self.settings.get("surname"):
+            first, rest = full.split(" ", 1)
+            self.settings.set("name", first)
+            self.settings.set("surname", rest.strip())
         self.chats = ChatStore(CHATS_FILE)
         ctk.set_appearance_mode(self.settings.get("theme"))
 
@@ -253,7 +259,7 @@ class LinumApp(ctk.CTk):
             for name in ("thumb_up", "thumb_down") for active in (False, True)
         }
         self.menu_icons = {name: make_icon(name, 16, theme.TEXT) for name in (
-            "settings", "palette", "folder", "model",
+            "settings", "palette", "folder", "model", "person",
         )}
         self.attach_icon = make_icon("plus", 16, theme.TEXT)
         self.close_icon = make_icon("close", 10, theme.TEXT)
@@ -546,10 +552,41 @@ class LinumApp(ctk.CTk):
             widget.bind("<Leave>", lambda event: profile.configure(fg_color="transparent"))
         self._update_profile()
 
+    def full_name(self):
+        return f"{self.settings.get('name').strip()} {self.settings.get('surname').strip()}".strip()
+
+    def avatar_image(self, size):
+        # Фото профілю кружечком, або None, якщо фото немає
+        path = self.settings.get("avatar")
+        if not path or not Path(path).exists():
+            return None
+        image = Image.open(path).convert("RGB")
+        side = min(image.size)
+        image = image.crop(((image.width - side) // 2, (image.height - side) // 2,
+                            (image.width + side) // 2, (image.height + side) // 2)).resize((size * 3, size * 3), Image.LANCZOS)
+        mask = Image.new("L", image.size, 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, image.width - 1, image.height - 1), fill=255)
+        image.putalpha(mask)
+        return ctk.CTkImage(light_image=image, dark_image=image, size=(size, size))
+
     def _update_profile(self):
-        name = self.settings.get("name").strip()
-        self.avatar.configure(text=(name[:1] or "L").upper())
+        name = self.full_name()
+        photo = self.avatar_image(30)
+        if photo is not None:
+            self.avatar_photo = photo
+            self.avatar.configure(image=photo, text="", fg_color="transparent")
+        else:
+            self.avatar.configure(image=None, text=(name[:1] or "L").upper(), fg_color=theme.ACCENT)
         self.profile_name.configure(text=name or t("profile"))
+
+    def profile_text(self):
+        # Що Gaia знає з профілю: ім'я та "про себе" (пошту не передаємо, вона їй не потрібна)
+        parts = []
+        if self.full_name():
+            parts.append(t("profile_for_gaia_name").format(name=self.full_name()))
+        if self.settings.get("about").strip():
+            parts.append(t("profile_for_gaia_about").format(about=self.settings.get("about").strip()))
+        return " ".join(parts)
 
     def toggle_sidebar(self):
         self.sidebar_visible = not self.sidebar_visible
@@ -2151,6 +2188,7 @@ class LinumApp(ctk.CTk):
         job = self.job_id
         # Мозок відповідає від імені обраної моделі (Cygnus 2.0, Fornax 1.0...)
         model_name = self.model_title(self.selected_model or DEFAULT_MODEL)
+        profile = self.profile_text()
         self.set_status(t("linum_reasoning") if settings["think"] else t("linum_thinking"))
         history_messages = list(chat["messages"])
 
@@ -2160,7 +2198,7 @@ class LinumApp(ctk.CTk):
 
                 # Художник міг лишити зайняту відеопам'ять. Віддаємо її, щоб Gaia завантажилась.
                 free_gpu_memory()
-                decision = brain.decide(brain.history_from_chat(history_messages), settings, model_name)
+                decision = brain.decide(brain.history_from_chat(history_messages), settings, model_name, profile)
             except Exception as error:
                 self.after(0, self._deliver, job, self._on_brain_failed, chat_id, text, error)
                 return
@@ -2568,6 +2606,7 @@ class LinumApp(ctk.CTk):
 
         is_dark = ctk.get_appearance_mode() == "Dark"
         items = (
+            (t("profile"), "person", lambda: self.open_settings("profile")),
             (t("settings"), "settings", lambda: self.open_settings("general")),
             (t("light_theme") if is_dark else t("dark_theme"), "palette", self.quick_toggle_theme),
             (t("images_folder"), "folder", lambda: open_folder(OUTPUTS_DIR)),
@@ -2759,6 +2798,7 @@ class LinumApp(ctk.CTk):
         content.pack(side="left", fill="y", padx=(32, 0))
 
         for key, title in (
+            ("profile", t("profile")),
             ("general", t("general")),
             ("appearance", t("appearance")),
             ("generation", t("generation")),
@@ -2854,27 +2894,107 @@ class LinumApp(ctk.CTk):
         menu.grid(row=0, column=1, sticky="e")
         return menu
 
+    def _settings_profile(self, content):
+        # Профіль: ім'я, прізвище, фото, пошта і кілька слів про себе. Лише на цьому комп'ютері.
+        self._settings_title(content, t("profile"))
+        ctk.CTkLabel(
+            content, text=t("profile_hint"), font=self.font(12), text_color=theme.MUTED, anchor="w",
+            justify="left", wraplength=560,
+        ).pack(fill="x", pady=(0, 18))
+
+        # Фото: велике кругле і дві кнопки
+        head = ctk.CTkFrame(content, fg_color="transparent")
+        head.pack(fill="x", pady=(0, 18))
+        photo = self.avatar_image(72)
+        name = self.full_name()
+        big = ctk.CTkLabel(
+            head, text="" if photo else (name[:1] or "L").upper(), image=photo, width=72, height=72, corner_radius=36,
+            fg_color="transparent" if photo else theme.ACCENT, text_color=theme.ACCENT_TEXT, font=self.font(28, "bold"),
+        )
+        big.pack(side="left")
+        self.profile_photo = photo
+        buttons = ctk.CTkFrame(head, fg_color="transparent")
+        buttons.pack(side="left", padx=(16, 0))
+        for text, command in ((t("change_photo"), self.choose_avatar), (t("remove_photo"), self.remove_avatar)):
+            if command == self.remove_avatar and not photo:
+                continue
+            ctk.CTkButton(
+                buttons, text=text, width=0, height=30, corner_radius=8, font=self.font(13), fg_color="transparent",
+                hover_color=theme.SURFACE_HOVER, text_color=theme.TEXT, border_width=1, border_color=theme.BORDER,
+                command=command,
+            ).pack(anchor="w", pady=2)
+
+        self._profile_entry(content, t("first_name"), t("first_name_hint"), "name", t("name_placeholder"))
+        self._profile_entry(content, t("surname"), t("surname_hint"), "surname", t("surname"))
+        self._profile_entry(content, t("email"), t("email_hint"), "email", "name@example.com")
+
+        # Про себе: кілька рядків, які читає Gaia
+        ctk.CTkLabel(content, text=t("about_me"), font=self.font(14), text_color=theme.TEXT, anchor="w").pack(fill="x")
+        ctk.CTkLabel(
+            content, text=t("about_me_hint"), font=self.font(12), text_color=theme.MUTED, anchor="w",
+            justify="left", wraplength=560,
+        ).pack(fill="x")
+        about = ctk.CTkTextbox(
+            content, height=90, corner_radius=8, border_width=1, border_color=theme.BORDER, fg_color=theme.SURFACE,
+            text_color=theme.TEXT, font=self.font(13), wrap="word",
+        )
+        about.insert("1.0", self.settings.get("about"))
+        about.pack(fill="x", pady=(6, 14))
+        about.bind("<KeyRelease>", lambda event: self.settings.set("about", about.get("1.0", "end").strip()[:500]))
+
+    def _profile_entry(self, content, title, hint, key, placeholder):
+        # Рядок профілю з полем вводу: зберігається одразу, поки ви пишете
+        row = self._setting_row(content, title, hint)
+        entry = ctk.CTkEntry(
+            row, width=240, height=34, corner_radius=8, border_width=1, border_color=theme.BORDER,
+            fg_color=theme.SURFACE, text_color=theme.TEXT, placeholder_text=placeholder,
+            placeholder_text_color=theme.MUTED, font=self.font(13),
+        )
+        if self.settings.get(key):
+            entry.insert(0, self.settings.get(key))
+        entry.grid(row=0, column=1, sticky="e")
+
+        def changed(event):
+            self.settings.set(key, entry.get().strip()[:80])
+            self._update_profile()
+            if key == "name" and self.view == "home":
+                self.greeting_label.configure(text=greeting_text(self.settings.get("name").strip()))
+
+        entry.bind("<KeyRelease>", changed)
+
+    def choose_avatar(self):
+        from tkinter import filedialog
+
+        path = filedialog.askopenfilename(
+            parent=self, title=t("change_photo"),
+            filetypes=[(t("images"), "*.png *.jpg *.jpeg *.webp *.bmp"), (t("all_files"), "*.*")],
+        )
+        if not path:
+            return
+        try:
+            image = Image.open(path).convert("RGB")
+        except Exception as error:
+            self.set_status(t("open_photo_failed").format(error=shorten(str(error), 100)))
+            return
+        # Копію фото кладемо в data/avatar.png: оригінал можна потім видалити чи перемістити
+        side = min(image.size)
+        image = image.crop(((image.width - side) // 2, (image.height - side) // 2,
+                            (image.width + side) // 2, (image.height + side) // 2)).resize((256, 256), Image.LANCZOS)
+        target = Path("data/avatar.png")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        image.save(target)
+        self.settings.set("avatar", str(target))
+        self._update_profile()
+        self.open_settings("profile")
+
+    def remove_avatar(self):
+        self.settings.set("avatar", "")
+        self._update_profile()
+        self.open_settings("profile")
+
     def _settings_general(self, content):
         self._settings_title(content, t("general"))
 
-        row = self._setting_row(content, t("your_name"), t("your_name_hint"))
-        name_entry = ctk.CTkEntry(
-            row,
-            width=220,
-            height=34,
-            corner_radius=8,
-            border_width=1,
-            border_color=theme.BORDER,
-            fg_color=theme.SURFACE,
-            text_color=theme.TEXT,
-            placeholder_text=t("name_placeholder"),
-            placeholder_text_color=theme.MUTED,
-            font=self.font(13),
-        )
-        if self.settings.get("name"):
-            name_entry.insert(0, self.settings.get("name"))
-        name_entry.grid(row=0, column=1, sticky="e")
-        name_entry.bind("<KeyRelease>", lambda event: self.set_name(name_entry.get()))
 
         row = self._setting_row(
             content,

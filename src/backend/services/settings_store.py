@@ -13,6 +13,11 @@ DEFAULTS = {
     "style": "Без стилю",
     "size": "Квадрат 1:1",
     "name": "",
+    # Профіль (лише на цьому комп'ютері): прізвище, пошта, фото (шлях до файлу) і кілька слів про себе для Gaia
+    "surname": "",
+    "email": "",
+    "avatar": "",
+    "about": "",
     "quality_boost": True,
     "translate": True,
     "reasoning": DEFAULT_REASONING,

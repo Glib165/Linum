@@ -117,6 +117,12 @@ def _expand(d):
     d.line((14, 82, 40, 56), fill=255, width=STROKE)
 
 
+def _person(d):
+    # Людина: голова і плечі, для профілю
+    d.ellipse((32, 12, 64, 44), outline=255, width=STROKE)
+    d.arc((14, 54, 82, 122), start=180, end=360, fill=255, width=STROKE)
+
+
 def _close(d):
     d.line((22, 22, 74, 74), fill=255, width=STROKE + 2)
     d.line((74, 22, 22, 74), fill=255, width=STROKE + 2)
@@ -137,6 +143,7 @@ DRAWERS = {
     "palette": _palette,
     "frame": _frame,
     "model": _model,
+    "person": _person,
     "bulb": _bulb,
     "dots": _dots,
     "expand": _expand,
