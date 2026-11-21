@@ -39,6 +39,7 @@ from src.backend.services.settings_store import SettingsStore
 from src.frontend import theme
 from src.frontend.icons import make_icon
 from src.frontend.i18n import LANGUAGES, greeting, label, set_language, t, unlabel
+from src.frontend.system import MAC, copy_image_mac, open_path, show_in_folder
 from src.frontend.widgets import (
     PromptBox,
     SelectableText,
@@ -116,7 +117,9 @@ def greeting_text(name):
 
 
 def copy_image_to_clipboard(path):
-    """Кладе картинку в буфер обміну Windows, щоб її можна було вставити в чат чи редактор."""
+    """Кладе картинку в буфер обміну, щоб її можна було вставити в чат чи редактор."""
+    if MAC:
+        return copy_image_mac(path)
     import io
 
     from ctypes import wintypes
@@ -153,6 +156,8 @@ def free_gpu_memory():
     torch = sys.modules.get("torch")
     if torch is not None and torch.cuda.is_available():
         torch.cuda.empty_cache()
+    elif torch is not None and torch.backends.mps.is_available():
+        torch.mps.empty_cache()
 
 
 class Cancelled(Exception):
@@ -170,7 +175,7 @@ def torch_out_of_memory():
 def open_folder(path):
     folder = Path(path)
     folder.mkdir(parents=True, exist_ok=True)
-    os.startfile(folder.resolve())
+    open_path(folder)
 
 
 class LinumApp(ctk.CTk):
@@ -371,7 +376,14 @@ class LinumApp(ctk.CTk):
             ico_path.parent.mkdir(parents=True, exist_ok=True)
             self._build_ico(ico_path)
         self.icon_path = str(ico_path.resolve())
-        self.iconbitmap(self.icon_path)
+        if MAC:
+            # На Mac іконки .ico немає: показуємо звичайну картинку
+            from PIL import ImageTk
+
+            self.mac_icon = ImageTk.PhotoImage(Image.open(ICON_PATH).convert("RGB").resize((256, 256)))
+            self.iconphoto(True, self.mac_icon)
+        else:
+            self.iconbitmap(self.icon_path)
         # Ім'я "Linum" замість "Python" у меню панелі завдань і при закріпленні
         from src.frontend.taskbar import describe_window
 
@@ -1586,7 +1598,7 @@ class LinumApp(ctk.CTk):
         self.small_button(actions, t("more_variant"), self.small_icons["refresh"], lambda m=message: self.variation(m)).pack(side="left")
         self.small_button(actions, t("copy_prompt"), self.small_icons["copy"], lambda m=message: self.copy_prompt(m)).pack(side="left")
         if path.exists():
-            self.small_button(actions, t("open"), self.small_icons["open"], lambda p=path: os.startfile(p.resolve())).pack(side="left")
+            self.small_button(actions, t("open"), self.small_icons["open"], lambda p=path: open_path(p)).pack(side="left")
             self.small_button(actions, t("in_folder"), self.small_icons["folder"], lambda p=path: self.show_in_folder(p)).pack(side="left")
         return row
 
@@ -1613,7 +1625,7 @@ class LinumApp(ctk.CTk):
         self.pending = {"row": row, "title": title, "bar": bar, "steps": steps_label}
 
     def show_in_folder(self, path):
-        subprocess.Popen(f'explorer /select,"{path.resolve()}"')
+        show_in_folder(path)
 
     def copy_prompt(self, message):
         self.clipboard_clear()
@@ -2657,7 +2669,7 @@ class LinumApp(ctk.CTk):
         viewer_button(t("in_folder"), lambda: self.show_in_folder(path))
         copy_button = viewer_button(t("copy"), lambda: self.copy_image(path, copy_button))
         self.viewer_copy = lambda: self.copy_image(path, copy_button)
-        viewer_button(t("open"), lambda: os.startfile(path.resolve()))
+        viewer_button(t("open"), lambda: open_path(path))
         if chat_id is not None:
             viewer_button(t("go_to_chat"), self.later(lambda: (self.close_viewer(), self.open_chat(chat_id))))
 
@@ -3030,7 +3042,7 @@ class LinumApp(ctk.CTk):
             if picture and Path(picture).exists():
                 thumb = ctk.CTkLabel(row, image=self.thumbnail(picture, 56), text="", cursor="hand2")
                 thumb.grid(row=0, column=0, rowspan=2, padx=8, pady=8)
-                thumb.bind("<Button-1>", lambda event, p=picture: os.startfile(Path(p).resolve()))
+                thumb.bind("<Button-1>", lambda event, p=picture: open_path(p))
             ctk.CTkLabel(
                 row, text=item["request"], font=self.font(13), text_color=theme.TEXT, anchor="w",
                 justify="left", wraplength=470,
@@ -3100,6 +3112,8 @@ class LinumApp(ctk.CTk):
         torch = sys.modules.get("torch")
         if torch is not None and torch.cuda.is_available():
             gpu = torch.cuda.get_device_name(0)
+        elif torch is not None and torch.backends.mps.is_available():
+            gpu = "Apple Silicon (MPS)"
 
         self._setting_row(content, t("model"), f"{self.model_title(self.loaded_model or DEFAULT_MODEL)}: Stable Diffusion 1.5")
         self._setting_row(content, t("gpu"), gpu)

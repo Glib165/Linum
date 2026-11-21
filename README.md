@@ -35,13 +35,27 @@ You talk to **Gaia**, Linum's assistant, in any language. She answers questions,
 
 ## Requirements
 
+**Windows**
 - Windows 10 or 11.
 - NVIDIA graphics card with **6 GB** of video memory or more (developed on a GTX 1660 Super).
 - **32 GB RAM** recommended: Gaia's brain (Gemma 4, 26B) partly runs from RAM.
+
+**macOS** (experimental, not tested on a real Mac yet)
+- A Mac with **Apple Silicon** (M1, M2, M3, M4 or newer). Intel Macs are not supported.
+- **32 GB** of memory for the full Gaia 3.7; with 16 GB use the **Low** reasoning level.
+
+**Both**
 - About **35 GB** of free disk space for the models.
 - [Python 3.13](https://www.python.org/downloads/) and [Ollama](https://ollama.com).
 
-## Installation
+## Installation on Mac
+
+1. Install Python 3.13 and Ollama (open Ollama once after installing).
+2. Download and unpack Linum.
+3. Double-click **`install.command`** (if macOS blocks it: right-click it, Open, Open). It installs everything and creates **Linum** in your Applications folder.
+4. Start Linum from Applications, Launchpad or Spotlight.
+
+## Installation on Windows
 
 1. Install Python 3.13 and Ollama.
 2. Download this repository (Code -> Download ZIP) and unpack it, or `git clone` it.

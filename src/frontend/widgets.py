@@ -5,6 +5,7 @@
 #   fade_in         плавна поява нового вмісту
 #   install_clipboard_keys  Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+A на будь-якій розкладці
 
+import sys
 import tkinter as tk
 import tkinter.font as tkfont
 import weakref
@@ -89,6 +90,20 @@ def text_menu(widget, event, editable):
 
 
 def install_clipboard_keys(root):
+    if sys.platform == "darwin":
+        # На Mac Cmd+C/V/X tkinter обробляє сам; додаємо лише Cmd+A "виділити все"
+        def select_all(event):
+            widget = event.widget
+            if isinstance(widget, tk.Text):
+                widget.tag_add("sel", "1.0", "end-1c")
+                return "break"
+            if isinstance(widget, tk.Entry):
+                widget.select_range(0, "end")
+                return "break"
+            return None
+
+        root.bind_all("<Command-a>", select_all)
+        return
     # На українській чи російській розкладці Ctrl+C надсилає кириличну літеру,
     # і стандартні комбінації tkinter не спрацьовують. Тому ловимо фізичну клавішу.
     actions = {67: "<<Copy>>", 86: "<<Paste>>", 88: "<<Cut>>", 65: "select_all", 90: "<<Undo>>"}

@@ -8,6 +8,7 @@ from pathlib import Path
 import customtkinter as ctk
 
 from src.frontend import theme
+from src.frontend.system import open_path
 from src.frontend.widgets import SelectableText
 
 WIDTH = 760
@@ -74,5 +75,5 @@ class ChatWindow(ctk.CTkToplevel):
         image = self.app.card_image(Path(path), longest=longest)
         self.images.append(image)
         label = ctk.CTkLabel(parent, image=image, text="", cursor="hand2")
-        label.bind("<Button-1>", lambda event: os.startfile(Path(path).resolve()))
+        label.bind("<Button-1>", lambda event: open_path(path))
         return label

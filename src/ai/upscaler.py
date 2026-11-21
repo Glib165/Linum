@@ -24,7 +24,9 @@ def load():
         from spandrel import ModelLoader
 
         _model = ModelLoader().load_from_file(MODEL_PATH).eval()
-        _model.to("cuda" if torch.cuda.is_available() else "cpu")
+        from src.ai.device import device
+
+        _model.to(device())
     return _model
 
 
@@ -52,6 +54,8 @@ def upscale_x4(image):
 
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
+    elif torch.backends.mps.is_available():
+        torch.mps.empty_cache()
     return Image.fromarray((result * 255 + 0.5).astype(np.uint8))
 
 

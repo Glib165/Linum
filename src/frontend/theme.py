@@ -32,4 +32,5 @@ VIEWER_TEXT = ("#EDEDED", "#EDEDED")
 VIEWER_MUTED = ("#9A9A9A", "#9A9A9A")
 VIEWER_HOVER = ("#2A2A2A", "#2A2A2A")
 
-FONT_FAMILY = "Segoe UI"
+# Шрифт інтерфейсу: Segoe UI на Windows, системний Helvetica Neue на Mac
+FONT_FAMILY = "Helvetica Neue" if __import__("sys").platform == "darwin" else "Segoe UI"

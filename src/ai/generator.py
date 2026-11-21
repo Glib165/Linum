@@ -8,6 +8,7 @@ from PIL import Image, ImageFilter
 from diffusers import AutoencoderKL, LCMScheduler, DPMSolverMultistepScheduler, StableDiffusionPipeline, StableDiffusionInpaintPipeline 
 
 from config.config import MODELS, DEFAULT_MODEL, GUIDANCE_SCALE, IMAGE_WIDTH, IMAGE_HEIGHT, OUTPUTS_DIR
+from src.ai.device import device
 
 
 def load_pipeline(model_path, vae_name=None, lora=None):
@@ -25,9 +26,19 @@ def load_pipeline(model_path, vae_name=None, lora=None):
         pipe.load_lora_weights(lora)
         pipe.fuse_lora()
         pipe.scheduler = LCMScheduler.from_config(pipe.scheduler.config)
-    pipe.enable_model_cpu_offload()
+    place_on_device(pipe)
     pipe.enable_attention_slicing()
     return pipe
+
+
+def place_on_device(pipe):
+    # NVIDIA: частини моделі по черзі переходять з оперативної пам'яті на відеокарту (6 ГБ замало для всієї).
+    # Mac (mps) має спільну пам'ять для процесора й відеокарти, тож модель кладемо туди цілком.
+    place = device()
+    if place == "cuda":
+        pipe.enable_model_cpu_offload()
+    else:
+        pipe.to(place)
 
 
 def load_model(model_name):
@@ -80,6 +91,8 @@ def free_gpu_memory():
     # щоб нею могла скористатися мовна модель Gaia.
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
+    elif torch.backends.mps.is_available():
+        torch.mps.empty_cache()
 
 
 def save_image(image):
@@ -112,7 +125,7 @@ def edit_pipeline(pipe):
         _edit_pipes.clear()
         edit_pipe = StableDiffusionInpaintPipeline(**pipe.components)
         edit_pipe.set_progress_bar_config(disable=True)
-        edit_pipe.enable_model_cpu_offload()
+        place_on_device(edit_pipe)
         _edit_pipes[key] = edit_pipe
     return _edit_pipes[key]
 
