@@ -35,8 +35,12 @@ def main():
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
         print(f"Завантажую / downloading {repo}/{filename} (~2 GB)...")
-        cached = hf_hub_download(repo, filename)
-        shutil.copyfile(cached, target)
+        # Обірване завантаження Hugging Face продовжує сам. Готовий файл переносимо, а не копіюємо,
+        # щоб він не лежав на диску двічі.
+        cached = Path(hf_hub_download(repo, filename)).resolve()
+        partial = target.with_suffix(".part")
+        shutil.move(cached, partial)
+        partial.replace(target)
     url, target = UPSCALER
     target = Path(target)
     if target.exists():
@@ -44,7 +48,10 @@ def main():
     else:
         target.parent.mkdir(parents=True, exist_ok=True)
         print("Завантажую / downloading Real-ESRGAN x4plus (67 MB)...")
-        urllib.request.urlretrieve(url, target)
+        # Спершу у файл .part: якщо завантаження обірветься, недокачаний файл не вважатиметься готовим
+        partial = target.with_suffix(".part")
+        urllib.request.urlretrieve(url, partial)
+        partial.replace(target)
     print("Готово / done.")
 
 

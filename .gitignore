@@ -40,3 +40,6 @@ __pycache__/
 *.pyc
 .venv/
 node_modules/
+
+# Python and uv downloaded by install.bat / install.command
+tools/

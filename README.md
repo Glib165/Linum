@@ -46,21 +46,21 @@ You talk to **Gaia**, Linum's assistant, in any language. She answers questions,
 
 **Both**
 - About **35 GB** of free disk space for the models.
-- [Python 3.13](https://www.python.org/downloads/) and [Ollama](https://ollama.com).
+- An internet connection during installation. Nothing has to be installed beforehand: the installer downloads Python and [Ollama](https://ollama.com) by itself.
 
 ## Installation on Mac
 
-1. Install Python 3.13 and Ollama (open Ollama once after installing).
-2. Download and unpack Linum.
-3. Double-click **`install.command`** (if macOS blocks it: right-click it, Open, Open). It installs everything and creates **Linum** in your Applications folder.
-4. Start Linum from Applications, Launchpad or Spotlight.
+1. Download **Linum-1.8.zip** from the [latest release](https://github.com/Glib165/Linum/releases/latest) and unpack it.
+2. Double-click **`install.command`** (if macOS blocks it: right-click it, Open, Open). It downloads Python, Ollama, the libraries and the models (about 30 GB, this takes a while) and creates **Linum** in your Applications folder.
+3. Start Linum from Applications, Launchpad or Spotlight.
 
 ## Installation on Windows
 
-1. Install Python 3.13 and Ollama.
-2. Download this repository (Code -> Download ZIP) and unpack it, or `git clone` it.
-3. Double-click **`install.bat`**. It installs the libraries, downloads the models (about 30 GB in total, this takes a while) and creates **Linum shortcuts** on the Desktop and in the Start menu.
-4. Start Linum with the shortcut.
+1. Download **Linum-1.8.zip** from the [latest release](https://github.com/Glib165/Linum/releases/latest) and unpack it.
+2. Double-click **`install.bat`**. It downloads Python, Ollama, the libraries and the models (about 30 GB, this takes a while) and creates **Linum shortcuts** on the Desktop and in the Start menu.
+3. Start Linum with the shortcut.
+
+If the download breaks, run the installer again: it continues from where it stopped.
 
 <details>
 <summary>Manual installation</summary>

@@ -7,7 +7,11 @@
 #   python -m src.ai.brain
 
 import json
+import os
 import re
+import shutil
+import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -155,8 +159,53 @@ def level(name):
     return REASONING.get(name, REASONING[DEFAULT_REASONING])
 
 
+def _ollama_apps():
+    # Де може лежати Ollama: спершу програма з іконкою в треї, потім сам сервер
+    home = Path.home()
+    if sys.platform == "win32":
+        folder = Path(os.environ.get("LOCALAPPDATA", home)) / "Programs" / "Ollama"
+        return [[str(folder / "ollama app.exe")], [str(folder / "ollama.exe"), "serve"]]
+    if sys.platform == "darwin":
+        apps = [home / "Applications" / "Ollama.app", Path("/Applications/Ollama.app")]
+        return [["open", "-g", "-a", str(app)] for app in apps if app.exists()]
+    return []
+
+
+def start_ollama(wait=30):
+    """Запускає Ollama, якщо вона встановлена, але не працює. Повертає True, коли вона відповідає."""
+    try:
+        ollama.list()
+        return True
+    except Exception:
+        pass
+    commands = _ollama_apps()
+    server = shutil.which("ollama")
+    if server:
+        commands.append([server, "serve"])
+    for command in commands:
+        if command[0] != "open" and not Path(command[0]).exists():
+            continue
+        try:
+            hidden = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             creationflags=hidden, start_new_session=sys.platform != "win32")
+        except OSError:
+            continue
+        deadline = time.time() + wait
+        while time.time() < deadline:
+            time.sleep(1)
+            try:
+                ollama.list()
+                return True
+            except Exception:
+                pass
+    return False
+
+
 def is_available(model=LLM_MODEL):
-    # Чи запущена Ollama і чи є в ній потрібна модель
+    # Чи запущена Ollama і чи є в ній потрібна модель. Якщо Ollama вимкнена, вмикаємо її самі.
+    if not start_ollama():
+        return False
     try:
         names = [item.model for item in ollama.list().models]
     except Exception:
