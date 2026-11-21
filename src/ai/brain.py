@@ -162,6 +162,10 @@ def level(name):
 def _ollama_apps():
     # Де може лежати Ollama: спершу програма з іконкою в треї, потім сам сервер
     home = Path.home()
+    bundled = Path("ollama/ollama.exe").resolve()
+    if bundled.exists():
+        # Повна версія: своя Ollama в папці Linum (порт і папку моделей задає main.py)
+        return [[str(bundled), "serve"]]
     if sys.platform == "win32":
         folder = Path(os.environ.get("LOCALAPPDATA", home)) / "Programs" / "Ollama"
         return [[str(folder / "ollama app.exe")], [str(folder / "ollama.exe"), "serve"]]

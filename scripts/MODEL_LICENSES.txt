@@ -1,0 +1,58 @@
+Linum full version: models included in this folder
+====================================================
+
+Linum's own code is under the MIT license (see LICENSE).
+The models below were made by other people. They are included unchanged,
+under their own licenses. By using them you accept these licenses.
+
+Gaia 3.7 (brain)          Gemma 4 26B by Google, via Ollama
+                          Apache License 2.0
+                          https://ai.google.dev/gemma/apache_2
+                          (gaia-3.7 = Gemma 4 26B + Linum's instructions in models/llm/Gaia.Modelfile)
+
+Low reasoning level       Gemma 4 E4B (QAT) by Google, via Ollama
+                          Apache License 2.0
+
+Gaia (art model)          DreamShaper 8 by Lykon
+                          CreativeML OpenRAIL-M
+                          https://huggingface.co/Lykon/DreamShaper
+
+Cygnus 2.0                Realistic Vision V6.0 B1 by SG161222
+                          CreativeML OpenRAIL-M
+                          https://huggingface.co/SG161222/Realistic_Vision_V6.0_B1_noVAE
+
+Fornax 1.0                LCM-LoRA SD1.5 by Latent Consistency
+                          OpenRAIL++
+                          https://huggingface.co/latent-consistency/lcm-lora-sdv1-5
+
+VAE                       sd-vae-ft-mse by Stability AI
+                          MIT
+                          https://huggingface.co/stabilityai/sd-vae-ft-mse
+
+Object finder             CLIPSeg rd64 refined by CIDAS
+                          Apache License 2.0
+                          https://huggingface.co/CIDAS/clipseg-rd64-refined
+
+Object outlines           Segment Anything (SAM ViT-B) by Meta
+                          Apache License 2.0
+                          https://huggingface.co/facebook/sam-vit-base
+
+Translator                OPUS-MT uk-en and ru-en by Helsinki-NLP
+                          CC BY 4.0
+                          https://huggingface.co/Helsinki-NLP/opus-mt-uk-en
+
+Upscaler                  Real-ESRGAN x4plus by Xintao Wang
+                          BSD 3-Clause
+                          https://github.com/xinntao/Real-ESRGAN
+
+Model engine              Ollama
+                          MIT
+                          https://github.com/ollama/ollama
+
+Python                    Python 3.13 by the Python Software Foundation
+                          PSF License (see python/LICENSE.txt)
+
+CreativeML OpenRAIL-M use restrictions (short version, the full text is on the model pages):
+you may not use these models to break the law, to harm people, to spread false
+information meant to hurt others, to impersonate people without consent,
+or to generate content that exploits or harms minors.
