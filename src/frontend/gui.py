@@ -533,23 +533,11 @@ class LinumApp(ctk.CTk):
         profile.grid(row=5, column=0, sticky="ew", padx=8, pady=8)
         profile.grid_columnconfigure(1, weight=1)
         self.profile = profile
-        self.avatar = ctk.CTkLabel(
-            profile,
-            text="",
-            width=30,
-            height=30,
-            corner_radius=15,
-            fg_color=theme.ACCENT,
-            text_color=theme.ACCENT_TEXT,
-            font=self.font(13, "bold"),
-        )
-        self.avatar.grid(row=0, column=0, padx=(6, 0), pady=6)
+        self.avatar = None
         self.profile_name = ctk.CTkLabel(profile, text="", font=self.font(14), text_color=theme.TEXT, anchor="w")
         self.profile_name.grid(row=0, column=1, sticky="ew", padx=(10, 0))
-        for widget in (profile, self.avatar, self.profile_name):
-            widget.bind("<Button-1>", self.toggle_account_menu)
-            widget.bind("<Enter>", lambda event: profile.configure(fg_color=theme.SURFACE_HOVER))
-            widget.bind("<Leave>", lambda event: profile.configure(fg_color="transparent"))
+        for widget in (profile, self.profile_name):
+            self._bind_profile(widget)
         self._update_profile()
 
     def full_name(self):
@@ -569,14 +557,27 @@ class LinumApp(ctk.CTk):
         image.putalpha(mask)
         return ctk.CTkImage(light_image=image, dark_image=image, size=(size, size))
 
+    def _bind_profile(self, widget):
+        # Клік по профілю відкриває меню, наведення підсвічує весь рядок
+        widget.bind("<Button-1>", self.toggle_account_menu)
+        widget.bind("<Enter>", lambda event: self.profile.configure(fg_color=theme.SURFACE_HOVER))
+        widget.bind("<Leave>", lambda event: self.profile.configure(fg_color="transparent"))
+
     def _update_profile(self):
         name = self.full_name()
+        # Кружечок щоразу створюємо заново: customtkinter не вміє прибрати з напису картинку,
+        # і після "Прибрати фото" старе фото лишалося б поверх літери
+        if self.avatar is not None:
+            self.avatar.destroy()
         photo = self.avatar_image(30)
-        if photo is not None:
-            self.avatar_photo = photo
-            self.avatar.configure(image=photo, text="", fg_color="transparent")
-        else:
-            self.avatar.configure(image=None, text=(name[:1] or "L").upper(), fg_color=theme.ACCENT)
+        self.avatar_photo = photo
+        self.avatar = ctk.CTkLabel(
+            self.profile, text="" if photo else (name[:1] or "L").upper(), image=photo, width=30, height=30,
+            corner_radius=15, fg_color="transparent" if photo else theme.ACCENT, text_color=theme.ACCENT_TEXT,
+            font=self.font(13, "bold"),
+        )
+        self.avatar.grid(row=0, column=0, padx=(6, 0), pady=6)
+        self._bind_profile(self.avatar)
         self.profile_name.configure(text=name or t("profile"))
 
     def profile_text(self):
