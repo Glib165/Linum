@@ -8,8 +8,9 @@ import torch
 
 def device():
     """Повертає "cuda", "mps" або "cpu": найкраще, що є на цьому комп'ютері."""
-    # ЗАВДАННЯ: замініть рядок return нижче на if / elif / else:
-    #   якщо torch.cuda.is_available()          -> поверніть "cuda"
-    #   інакше, якщо torch.backends.mps.is_available() -> поверніть "mps"
-    #   інакше                                  -> поверніть "cpu"
-    return "cuda"  # тимчасово, щоб на Windows усе працювало, поки функція не написана
+    if torch.cuda.is_available():
+        return "cuda"
+    elif torch.backends.mps.is_available():
+        return "mps"
+    else:
+        return "cpu"

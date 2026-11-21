@@ -17,11 +17,10 @@ MAC = sys.platform == "darwin"
 def open_path(path):
     """Відкриває файл чи папку програмою за замовчуванням (картинку - переглядачем, папку - провідником)."""
     path = Path(path).resolve()
-    # ЗАВДАННЯ: якщо це Mac (MAC), запустіть команду "open" з цим шляхом:
-    #     subprocess.Popen(["open", str(path)])
-    # а інакше (Windows) - як було раніше:
-    #     os.startfile(path)
-    os.startfile(path)  # тимчасово, щоб на Windows усе працювало, поки функція не написана
+    if MAC:
+        subprocess.Popen(["open", str(path)])
+    else:
+        os.startfile(path)
 
 
 def show_in_folder(path):
