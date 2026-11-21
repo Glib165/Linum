@@ -2,7 +2,16 @@
 
 **A local AI image studio with a chat assistant. Everything runs on your own computer: no cloud, no accounts, no internet needed after setup.**
 
-[Українською](README.uk.md)
+[Українською](README.uk.md) · **Website: [glib165.github.io/Linum](https://glib165.github.io/Linum/)**
+
+## Download
+
+There are two ways to get Linum, both give you the same files:
+
+1. **From the website**: open [glib165.github.io/Linum](https://glib165.github.io/Linum/) and press **Download Linum**.
+2. **From GitHub**: open the [latest release](https://github.com/Glib165/Linum/releases/latest) and download **Linum-1.8.zip** under Assets.
+
+Then unpack it and run the installer (see [Installation on Windows](#installation-on-windows) or [on Mac](#installation-on-mac)).
 
 You talk to **Gaia**, Linum's assistant, in any language. She answers questions, draws new images, edits your photos and learns from her own mistakes.
 
