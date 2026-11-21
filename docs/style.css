@@ -1,0 +1,350 @@
+/* Оформлення сайту Linum: чорне тло, хмара частинок і тонкий моноширинний текст поверх.
+   Синій акцент той самий, що в повзунку рівня міркувань у програмі (src/frontend/theme.py). */
+
+:root {
+    --accent: #5AA9DA;
+    --text: #DDDDDD;
+    --muted: #8A8A8A;
+    --chip: #1C1C1C;
+    --line: #2A2A2A;
+    --mono: "SF Mono", "Menlo", "Consolas", "Liberation Mono", monospace;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: #000;
+}
+
+body {
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.35;
+    letter-spacing: 0.02em;
+}
+
+h1,
+h2,
+p,
+ul,
+ol {
+    margin: 0;
+}
+
+a {
+    color: inherit;
+}
+
+/* Полотно з частинками на весь екран, під текстом */
+#bg {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    z-index: 0;
+}
+
+/* Якщо браузер не вміє WebGL2, замість хмари просто показуємо іконку */
+.no-webgl #bg {
+    background: #000 url("images/linum-icon.jpg") center / 42vmin no-repeat;
+}
+
+/* Шар з текстом. Сам він не ловить мишу, щоб курсор ворушив частинки;
+   посилання, кнопки і список карток ловлять її знову. */
+.ui {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    text-transform: uppercase;
+}
+
+.ui a,
+.ui button,
+.list,
+.about {
+    pointer-events: auto;
+}
+
+/* Текст світиться поверх частинок */
+.brand,
+.tags,
+.meta,
+.card p,
+.about {
+    mix-blend-mode: plus-lighter;
+}
+
+/* Логотип і назва */
+.brand {
+    position: absolute;
+    top: 24px;
+    left: 24px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.mark {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1.6px solid #fff;
+}
+
+.name {
+    font-size: 20px;
+    font-weight: 400;
+    color: #fff;
+}
+
+.sub {
+    margin-top: 2px;
+    font-size: 11px;
+    color: var(--muted);
+}
+
+/* Кружечок з версією вгорі праворуч */
+.counter {
+    position: absolute;
+    top: 24px;
+    right: 24px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: #0A0A0A;
+    color: #fff;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Кнопки-фільтри */
+.tags {
+    position: absolute;
+    top: 120px;
+    left: 24px;
+    width: 320px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.chip {
+    border: 0;
+    background: var(--chip);
+    color: #CFCFCF;
+    padding: 5px 9px;
+    font: inherit;
+    font-size: 11px;
+    letter-spacing: inherit;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+.chip:hover {
+    background: #2A2A2A;
+}
+
+.chip.active {
+    background: #E6E6E6;
+    color: #000;
+}
+
+/* Список карток зліва, гортається сам, без смуги прокрутки */
+.list {
+    position: absolute;
+    top: 200px;
+    left: 24px;
+    bottom: 0;
+    width: 320px;
+    overflow-y: auto;
+    scrollbar-width: none;
+    padding-bottom: 40px;
+}
+
+.list::-webkit-scrollbar {
+    display: none;
+}
+
+.card {
+    padding: 18px 0;
+    border-top: 1px solid var(--line);
+}
+
+.card[hidden] {
+    display: none;
+}
+
+.meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    font-size: 12px;
+}
+
+.meta span:first-child {
+    color: #fff;
+}
+
+.meta span:last-child {
+    color: var(--muted);
+    text-align: right;
+}
+
+.card p {
+    margin-top: 10px;
+    color: var(--muted);
+    text-transform: none;
+}
+
+/* Права колонка з текстом */
+.about {
+    position: absolute;
+    right: 90px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 380px;
+    max-height: calc(100% - 140px);
+    overflow-y: auto;
+    scrollbar-width: none;
+}
+
+.about::-webkit-scrollbar {
+    display: none;
+}
+
+.block + .block {
+    margin-top: 2.2em;
+}
+
+.about h2 {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--accent);
+    margin-bottom: 1em;
+}
+
+.about p {
+    text-align: justify;
+    text-transform: none;
+}
+
+.about ol {
+    padding-left: 1.6em;
+}
+
+.about li + li {
+    margin-top: 4px;
+}
+
+/* Моделі: назва зліва, для чого вона справа */
+.models {
+    list-style: none;
+    padding: 0;
+}
+
+.models li {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.models li span:first-child {
+    color: #fff;
+}
+
+.models li span:last-child {
+    color: var(--muted);
+}
+
+/* Головна кнопка: завантажити */
+.download {
+    display: inline-block;
+    padding: 10px 14px;
+    background: #E6E6E6;
+    color: #000;
+    text-decoration: none;
+    mix-blend-mode: normal;
+    transition: opacity 0.3s;
+}
+
+.about .small {
+    margin-top: 10px;
+    font-size: 11px;
+    color: var(--muted);
+    text-align: left;
+}
+
+.link {
+    display: block;
+    margin: 10px 0 4px;
+    text-decoration: underline;
+    transition: opacity 0.3s;
+}
+
+.download:hover,
+.link:hover {
+    opacity: 0.7;
+}
+
+/* Вузький екран: текст ближче до краю */
+@media (max-width: 1100px) {
+    .about {
+        right: 24px;
+        width: 320px;
+    }
+}
+
+/* Між ноутбуком і телефоном: картки не влазять поруч із текстом */
+@media (max-width: 1000px) {
+    .list {
+        display: none;
+    }
+}
+
+/* Телефон: хмара зверху, текст під нею, сторінка гортається */
+@media (max-width: 760px) {
+    html,
+    body {
+        overflow: auto;
+        height: auto;
+    }
+
+    .ui {
+        position: relative;
+        inset: auto;
+        padding: 72vh 24px 24px;
+    }
+
+    .tags {
+        display: none;
+    }
+
+    .about {
+        position: relative;
+        top: auto;
+        right: auto;
+        transform: none;
+        width: auto;
+        max-height: none;
+        padding: 20px;
+        background: rgba(0, 0, 0, 0.55);
+        mix-blend-mode: normal;
+    }
+
+    .about p {
+        text-align: left;
+    }
+}

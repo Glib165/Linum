@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Linum — ШІ-студія на вашому комп'ютері</title>
+    <meta name="description" content="Linum: безкоштовний локальний генератор зображень у вигляді чат-бота. Усе працює на вашому комп'ютері, без хмари й акаунтів.">
+    <link rel="icon" href="images/linum-icon.jpg">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Хмара частинок у формі іконки Linum. Малює її particles.js -->
+    <canvas id="bg"></canvas>
+
+    <div class="ui">
+        <header class="brand">
+            <img class="mark" src="images/linum-icon.jpg" alt="">
+            <div>
+                <h1 class="name">Linum</h1>
+                <p class="sub">Локальний генератор зображень</p>
+            </div>
+        </header>
+
+        <div class="counter" title="Версія">1.8</div>
+
+        <!-- Кнопки-фільтри: показують лише картки з потрібною міткою -->
+        <nav class="tags">
+            <button class="chip active" data-tag="all">Усе</button>
+            <button class="chip" data-tag="chat">Чат</button>
+            <button class="chip" data-tag="draw">Малювання</button>
+            <button class="chip" data-tag="photo">Фото</button>
+            <button class="chip" data-tag="color">Колір</button>
+            <button class="chip" data-tag="learn">Навчання</button>
+            <button class="chip" data-tag="memory">Пам'ять</button>
+            <button class="chip" data-tag="offline">Офлайн</button>
+        </nav>
+
+        <!-- Картки можливостей. data-tags: до яких кнопок-фільтрів картка належить -->
+        <section class="list">
+            <article class="card" data-tags="chat draw">
+                <div class="meta">
+                    <span>01 / Розмова<br>з Gaia</span>
+                    <span>Чат<br>будь-якою мовою</span>
+                </div>
+                <p>Пишіть будь-якою мовою. Gaia відповідає на питання, малює і сама вирішує, що зробити.</p>
+            </article>
+            <article class="card" data-tags="photo">
+                <div class="meta">
+                    <span>02 / Фото<br>словами</span>
+                    <span>Редагування<br>прибрати / додати</span>
+                </div>
+                <p>«Прибери це», «зроби робота червоним», «додай кота на диван». Решта фото лишається недоторканою.</p>
+            </article>
+            <article class="card" data-tags="photo color">
+                <div class="meta">
+                    <span>03 / Точний<br>колір</span>
+                    <span>Перефарбування<br>піксель у піксель</span>
+                </div>
+                <p>Змінює колір предмета, зберігаючи текстуру і тіні. Відредаговане фото лишається в повному розмірі.</p>
+            </article>
+            <article class="card" data-tags="learn draw">
+                <div class="meta">
+                    <span>04 / Вчиться<br>на помилках</span>
+                    <span>Агенти<br>критик / вчитель</span>
+                </div>
+                <p>Агент-критик перевіряє кожне зображення, виправляє помилки й записує уроки на майбутнє.</p>
+            </article>
+            <article class="card" data-tags="memory chat">
+                <div class="meta">
+                    <span>05 / Пам'ятає<br>вас</span>
+                    <span>Пам'ять<br>між чатами</span>
+                </div>
+                <p>Ваше ім'я і смаки між чатами. Усе, що Gaia пам'ятає, видно і можна видалити.</p>
+            </article>
+            <article class="card" data-tags="photo draw">
+                <div class="meta">
+                    <span>06 / Збільшення<br>×2</span>
+                    <span>Real-ESRGAN<br>чіткіше</span>
+                </div>
+                <p>Робить зображення вдвічі більшим і чіткішим.</p>
+            </article>
+            <article class="card" data-tags="draw offline">
+                <div class="meta">
+                    <span>07 / Ще<br>більше</span>
+                    <span>Стилі / мови<br>офлайн</span>
+                </div>
+                <p>Власні стилі, три мови інтерфейсу, кнопка зупинки та повністю офлайн-режим.</p>
+            </article>
+        </section>
+
+        <!-- Права колонка: що таке Linum, моделі, як встановити -->
+        <aside class="about">
+            <div class="block">
+                <h2>[linum]</h2>
+                <p>Linum — це безкоштовний локальний генератор зображень у вигляді чат-бота. Він має 3 моделі: Fornax, Gaia та Cygnus. Вони по-різному навантажують відеокарту, тому для простих фото беріть Fornax, а для складних — Cygnus. Gaia — модель на кожен день: збалансована і сильна.</p>
+            </div>
+
+            <div class="block">
+                <h2>[моделі]</h2>
+                <ul class="models">
+                    <li><span>Fornax 1.0</span><span>швидка, ~7 с</span></li>
+                    <li><span>Gaia 3.7</span><span>на кожен день</span></li>
+                    <li><span>Cygnus 2.0</span><span>фотореалізм</span></li>
+                </ul>
+            </div>
+
+            <div class="block">
+                <h2>[встановлення]</h2>
+                <ol>
+                    <li>Завантажте Linum і розпакуйте архів.</li>
+                    <li>Двічі клацніть install.bat і зачекайте.</li>
+                    <li>Запускайте Linum ярликом на стільниці.</li>
+                </ol>
+            </div>
+
+            <div class="block">
+                <h2>[завантажити]</h2>
+                <a class="download" href="https://github.com/Glib165/Linum/releases/latest/download/Linum-1.8.zip">Завантажити Linum 1.8 -></a>
+                <p class="small">Windows 10/11 · NVIDIA від 6 ГБ · безкоштовно, код відкритий (MIT)</p>
+                <a class="link" href="https://github.com/Glib165/Linum">GitHub -> Glib165/Linum</a>
+            </div>
+        </aside>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+    <script src="linum-mask.js"></script>
+    <script src="particles.js"></script>
+    <script>
+        // Кнопки-фільтри: ховаємо картки, у яких немає вибраної мітки
+        const chips = document.querySelectorAll(".chip");
+        const cards = document.querySelectorAll(".card");
+        chips.forEach(function (chip) {
+            chip.addEventListener("click", function () {
+                chips.forEach(function (other) { other.classList.remove("active"); });
+                chip.classList.add("active");
+                const tag = chip.dataset.tag;
+                cards.forEach(function (card) {
+                    const tags = card.dataset.tags.split(" ");
+                    card.hidden = tag !== "all" && !tags.includes(tag);
+                });
+            });
+        });
+    </script>
+</body>
+</html>
