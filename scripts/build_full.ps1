@@ -10,7 +10,8 @@
 
 param(
     [string]$Out = "E:\Linum-full",
-    [switch]$NoZip
+    [switch]$NoZip,
+    [switch]$ZipOnly
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
@@ -27,6 +28,29 @@ function Copy-Folder($from, $to, [string[]]$skipFolders = @(), [string[]]$skipFi
     if ($skipFiles.Count) { $arguments += "/XF"; $arguments += $skipFiles }
     & robocopy @arguments | Out-Null
     if ($LASTEXITCODE -ge 8) { throw "robocopy failed ($LASTEXITCODE): $from" }
+}
+
+function Remove-TestTraces {
+    # If the folder was started for a test, it now has chats, settings and pictures: they must not get into the archive
+    foreach ($item in "data", "outputs", "logs", "config\settings.json", "config\settings.tmp", "config\developer") {
+        $path = Join-Path $dest $item
+        if (Test-Path $path) { Remove-Item -Recurse -Force $path }
+    }
+    Get-ChildItem $dest -Recurse -Directory -Filter __pycache__ | Remove-Item -Recurse -Force
+}
+
+function New-Archive {
+    Write-Host "=== 7/7 Archive (no compression: the models do not shrink anyway) ==="
+    Remove-TestTraces
+    if (Test-Path $zip) { Remove-Item $zip }
+    tar --format=zip --options zip:compression=store -cf $zip -C $Out Linum
+    if ($LASTEXITCODE -ne 0) { throw "The archive was not made" }
+    Write-Host ("Archive: {0} ({1:N1} GB)" -f $zip, ((Get-Item $zip).Length / 1GB))
+}
+
+if ($ZipOnly) {
+    New-Archive
+    exit 0
 }
 
 if (git status --porcelain) {
@@ -76,7 +100,4 @@ $size = (Get-ChildItem $dest -Recurse -File | Measure-Object Length -Sum).Sum / 
 Write-Host ("Folder: {0} ({1:N1} GB)" -f $dest, $size)
 
 if ($NoZip) { exit 0 }
-Write-Host "=== 7/7 Archive (no compression: the models do not shrink anyway) ==="
-if (Test-Path $zip) { Remove-Item $zip }
-tar --format=zip --options zip:compression=store -cf $zip -C $Out Linum
-Write-Host ("Archive: {0} ({1:N1} GB)" -f $zip, ((Get-Item $zip).Length / 1GB))
+New-Archive
