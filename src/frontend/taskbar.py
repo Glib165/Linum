@@ -47,9 +47,6 @@ class PROPVARIANT(ctypes.Structure):
 def launch_command():
     # Команда, якою Windows запустить Linum знову: pythonw.exe (без вікна терміналу) і main.py
     root = Path(__file__).resolve().parents[2]
-    if (root / "Linum.exe").exists():
-        # Повна версія запускається своїм Linum.exe
-        return f'"{root / "Linum.exe"}"'
     folder = Path(sys.executable).parent
     python = folder / "pythonw.exe" if (folder / "pythonw.exe").exists() else Path(sys.executable)
     return f'"{python}" "{root / "main.py"}"'

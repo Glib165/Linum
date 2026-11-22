@@ -18,6 +18,25 @@ if (ROOT / "ollama" / "ollama.exe").exists():
     os.environ["OLLAMA_MODELS"] = str(ROOT / "ollama" / "models")
     os.environ["HF_HOME"] = str(ROOT / "models" / "huggingface")
 
+    # Ярлики: при першому запуску (і якщо папку потім перенесли) ставимо іконку Linum
+    # на ярлик поруч із папкою і створюємо ярлики на стільниці та в меню «Пуск».
+    marker = ROOT / "data" / "shortcuts.txt"
+    try:
+        made_for = marker.read_text(encoding="utf-8")
+    except OSError:
+        made_for = ""
+    if made_for != str(ROOT):
+        import subprocess
+
+        try:
+            subprocess.Popen(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
+                              "-File", str(ROOT / "scripts" / "create_shortcut.ps1")],
+                             creationflags=subprocess.CREATE_NO_WINDOW)
+            marker.parent.mkdir(exist_ok=True)
+            marker.write_text(str(ROOT), encoding="utf-8")
+        except OSError:
+            pass
+
 # Запуск ярликом (pythonw.exe) іде без вікна терміналу, тож повідомлення й помилки
 # пишемо в logs/linum.log, щоб їх можна було прочитати, якщо щось піде не так.
 if sys.stdout is None or sys.stderr is None:
