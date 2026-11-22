@@ -1,5 +1,7 @@
 # Linum
 
+<p align="center"><img src="docs/images/linum-icon.jpg" width="160" alt="Linum logo"></p>
+
 **A local AI image studio with a chat assistant. Everything runs on your own computer: no cloud, no accounts, no internet needed after setup.**
 
 [Українською](README.uk.md) · **Website: [glib165.github.io/Linum](https://glib165.github.io/Linum/)**

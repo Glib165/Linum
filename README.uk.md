@@ -1,5 +1,7 @@
 # Linum
 
+<p align="center"><img src="docs/images/linum-icon.jpg" width="160" alt="Логотип Linum"></p>
+
 **Локальна ШІ-студія зображень з чат-помічницею. Усе працює на вашому комп'ютері: без хмари, без акаунтів, без інтернету після встановлення.**
 
 [English](README.md) · **Сайт: [glib165.github.io/Linum](https://glib165.github.io/Linum/)**
