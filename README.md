@@ -6,12 +6,10 @@
 
 ## Download
 
-There are two ways to get Linum, both give you the same files:
+There are two ways to get Linum:
 
-1. **From the website**: open [glib165.github.io/Linum](https://glib165.github.io/Linum/) and press **Download Linum**.
-2. **From GitHub**: open the [latest release](https://github.com/Glib165/Linum/releases/latest) and download **Linum-1.8.zip** under Assets.
-
-Then unpack it and run the installer (see [Installation on Windows](#installation-on-windows) or [on Mac](#installation-on-mac)).
+1. **Full version, from the website** (Windows, 36 GB): open [glib165.github.io/Linum](https://glib165.github.io/Linum/) and press **Download Linum**. Everything is already inside: Python, Ollama, Gaia and all the models. Unpack the archive and double-click the **Linum** shortcut in the Linum folder. Nothing to install, no internet needed after the download. On the first start Linum also puts its shortcut on the Desktop and in the Start menu.
+2. **Small version, from GitHub** (Windows and Mac, 1 MB): open the [latest release](https://github.com/Glib165/Linum/releases/latest) and download **Linum-1.8.zip** under Assets. Unpack it and run the installer: it downloads Python, Ollama and the models by itself (see [Installation on Windows](#installation-on-windows) or [on Mac](#installation-on-mac)).
 
 You talk to **Gaia**, Linum's assistant, in any language. She answers questions, draws new images, edits your photos and learns from her own mistakes.
 
