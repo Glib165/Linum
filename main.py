@@ -9,6 +9,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 os.chdir(ROOT)
 
+from src.frontend.single_instance import claim_window, watch_for_activation  # noqa: E402
+
+listener = claim_window()
+if listener is None:
+    sys.exit(0)
+
 # Повна версія (архів з сайту) несе все з собою: Ollama з моделями лежить у папці ollama,
 # а маленькі моделі Hugging Face у models/huggingface. Тоді беремо їх звідти, а не з системи.
 # Ollama слухає свій порт 11435, щоб не заважати Ollama, яка вже може бути встановлена.
@@ -46,5 +52,15 @@ if sys.stdout is None or sys.stderr is None:
 
 from src.frontend.gui import LinumApp  # noqa: E402
 
-app = LinumApp()
-app.mainloop()
+with listener:
+    app = LinumApp()
+    app.after(0, watch_for_activation, app, listener)
+    app.mainloop()
+
+# Після оновлення запускаємо Linum знову. Робимо це тут, коли старе вікно вже закрилось
+# і звільнило свій "замок" (listener): інакше нова копія подумала б, що Linum уже відкритий.
+if getattr(app, "restart_requested", False):
+    import subprocess
+
+    flags = ["-E", "-s"] if sys.flags.ignore_environment else []
+    subprocess.Popen([sys.executable, *flags, str(ROOT / "main.py")], cwd=ROOT)

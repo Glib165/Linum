@@ -1,7 +1,8 @@
 # генерація картинок для Linum
 
-from datetime import datetime 
+from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
 import torch
 from PIL import Image, ImageFilter
@@ -71,7 +72,8 @@ def generate_image(
             on_step(step + 1, steps)
         return callback_kwargs
 
-    image = pipe(
+    image = run_pipeline(
+        pipe,
         prompt,
         negative_prompt=negative_prompt,
         width=width,
@@ -82,8 +84,18 @@ def generate_image(
         callback_on_step_end=step_callback,
     ).images[0]
 
-    free_gpu_memory()
     return save_image(image)
+
+
+def run_pipeline(pipe, *args, **kwargs):
+    try:
+        return pipe(*args, **kwargs)
+    except Exception:
+        # Після зупинки Diffusers може не встигнути повернути модель на процесор.
+        pipe.maybe_free_model_hooks()
+        raise
+    finally:
+        free_gpu_memory()
 
 
 def free_gpu_memory():
@@ -97,7 +109,7 @@ def free_gpu_memory():
 
 def save_image(image):
     Path(OUTPUTS_DIR).mkdir(parents=True, exist_ok=True)
-    filename = datetime.now().strftime("%Y%m%d_%H%M%S") + ".png"
+    filename = datetime.now().strftime("%Y%m%d_%H%M%S") + f"_{uuid4().hex}.png"
     path = Path(OUTPUTS_DIR) / filename
     image.save(path)
     return path
@@ -115,6 +127,10 @@ def working_size(width, height, longest=768, enlarge=1.0):
 _edit_pipes = {}
 
 
+def clear_edit_pipeline():
+    _edit_pipes.clear()
+
+
 def edit_pipeline(pipe):
     # Та сама модель, але в режимі "домалювати частину фото". Частини моделі спільні
     # зі звичайним режимом, тож додаткової пам'яті він не займає.
@@ -122,7 +138,7 @@ def edit_pipeline(pipe):
     # частини моделі лишаються на відеокарті, пам'ять переповнюється, і все працює в рази повільніше.
     key = id(pipe)
     if key not in _edit_pipes:
-        _edit_pipes.clear()
+        clear_edit_pipeline()
         edit_pipe = StableDiffusionInpaintPipeline(**pipe.components)
         edit_pipe.set_progress_bar_config(disable=True)
         place_on_device(edit_pipe)
@@ -203,7 +219,8 @@ def edit_image(pipe, image_path, prompt, mask=None, strength=0.6,
             on_step(min(step + 1, total), total)
         return callback_kwargs
 
-    result = edit_pipe(
+    result = run_pipeline(
+        edit_pipe,
         prompt,
         image=model_input,
         mask_image=work_mask,
@@ -216,7 +233,6 @@ def edit_image(pipe, image_path, prompt, mask=None, strength=0.6,
         generator=generator,
         callback_on_step_end=step_callback,
     ).images[0]
-    free_gpu_memory()
 
     # Повертаємо результат до розміру оригіналу. Поза виділенням лишаються оригінальні пікселі
     # (у повному розмірі, без втрати якості), а межу робимо м'якою.

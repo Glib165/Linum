@@ -23,7 +23,7 @@ from config.config import DEFAULT_REASONING, LLM_MODEL, REASONING
 MODELFILE = Path("models/llm/Gaia.Modelfile")
 
 # Скільки модель лишається в пам'яті після відповіді
-KEEP_ALIVE = "30m"
+KEEP_ALIVE = "5m"
 
 # Скільки останніх повідомлень чату показувати моделі
 HISTORY_LIMIT = 20
@@ -215,12 +215,6 @@ def is_available(model=LLM_MODEL):
     except Exception:
         return False
     return any(name == model or name.split(":")[0] == model or name == f"{model}:latest" for name in names)
-
-
-def warm_up(model=LLM_MODEL):
-    # Завантажує модель у пам'ять заздалегідь, щоб перша відповідь не чекала
-    release_others(model)
-    ollama.generate(model=model, prompt="", keep_alive=KEEP_ALIVE)
 
 
 def release_others(model, wait=15):
