@@ -158,6 +158,67 @@
             </div>
         </section>
 
+        <section class="part">
+            <h2>[що можна попросити]</h2>
+            <div class="examples">
+                <div class="example">
+                    <p class="ask">«Намалюй нічне місто майбутнього в стилі аніме»</p>
+                    <p class="does">Малює нове зображення, і відразу кілька варіантів, якщо хочете</p>
+                </div>
+                <div class="example">
+                    <p class="ask">«Прибери людину на фоні»</p>
+                    <p class="does">Знаходить її на фото, прибирає і домальовує фон</p>
+                </div>
+                <div class="example">
+                    <p class="ask">«Зроби машину червоною»</p>
+                    <p class="does">Перефарбовує піксель у піксель, зберігаючи текстуру і тіні</p>
+                </div>
+                <div class="example">
+                    <p class="ask">«Додай кота на диван»</p>
+                    <p class="does">Вирішує, де саме, і домальовує кота лише в тому місці</p>
+                </div>
+                <div class="example">
+                    <p class="ask">«Зроби з цього фото зиму»</p>
+                    <p class="does">Змінює все фото: сезон, час доби чи стиль</p>
+                </div>
+                <div class="example">
+                    <p class="ask">«Я люблю темні, похмурі тони»</p>
+                    <p class="does">Запам'ятовує і враховує у всіх наступних картинках</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="part">
+            <h2>[у цифрах]</h2>
+            <div class="stats">
+                <div class="stat"><span class="stat-value">~7 с</span><span class="stat-label">на картинку з Fornax</span></div>
+                <div class="stat"><span class="stat-value">3</span><span class="stat-label">художні моделі</span></div>
+                <div class="stat"><span class="stat-value">4</span><span class="stat-label">рівні міркувань</span></div>
+                <div class="stat"><span class="stat-value">4</span><span class="stat-label">варіанти за один запит</span></div>
+                <div class="stat"><span class="stat-value">0</span><span class="stat-label">фото, відправлених у хмару</span></div>
+            </div>
+        </section>
+
+        <section class="part">
+            <h2>[linum вчиться сам]</h2>
+            <p class="lead-text">Усередині Linum працюють чотири агенти. Вони дають собі завдання, перевіряють себе і записують уроки, які Linum читає перед кожною картинкою.</p>
+            <div class="agents">
+                <article class="agent"><h3>Тренер</h3><p>Вигадує завдання, на яких Linum може помилитися.</p></article>
+                <article class="agent"><h3>Автор</h3><p>Пише для художника детальний опис картинки.</p></article>
+                <article class="agent"><h3>Критик</h3><p>Дивиться на результат і знаходить, що вийшло не так.</p></article>
+                <article class="agent"><h3>Вчитель</h3><p>Робить з помилки урок, щоб вона не повторилася.</p></article>
+            </div>
+        </section>
+
+        <section class="part">
+            <h2>[стилі]</h2>
+            <div class="style-cloud">
+                <span>Фото</span><span>Кіно</span><span>Аніме</span><span>Олійний живопис</span>
+                <span>Акварель</span><span>3D</span><span>Піксель-арт</span><span>Ескіз</span>
+                <span class="own">+ ваші власні, описані звичайними словами</span>
+            </div>
+        </section>
+
         <section class="part columns">
             <div class="panel">
                 <h2>[приватність]</h2>
@@ -178,17 +239,40 @@
             </div>
         </section>
 
-        <section class="part finale">
-            <h2>[почати]</h2>
-            <p class="finale-text">Безкоштовно, з відкритим кодом, на вашому комп'ютері.</p>
-            <div class="finale-buttons">
-                <a class="download" href="https://huggingface.co/Glib165/Linum/resolve/main/Linum-1.9-full.zip?download=true">Windows: повна версія, 36 ГБ -></a>
-                <a class="download" href="https://github.com/Glib165/Linum/releases/latest">macOS: завантажити, 1 МБ -></a>
+        <section class="part">
+            <h2>[питання]</h2>
+            <div class="faq">
+                <details>
+                    <summary>Чи потрібен інтернет?</summary>
+                    <p>Лише щоб завантажити Linum. Далі він працює без інтернету: усі моделі лежать на вашому комп'ютері.</p>
+                </details>
+                <details>
+                    <summary>Скільки це коштує?</summary>
+                    <p>Нічого. Linum безкоштовний, без підписок і реклами, а його код відкритий на GitHub.</p>
+                </details>
+                <details>
+                    <summary>Хтось бачить мої фото і чати?</summary>
+                    <p>Ні. Чати, фото і пам'ять Linum зберігаються лише на вашому комп'ютері і нікуди не відправляються.</p>
+                </details>
+                <details>
+                    <summary>Якою мовою з ним говорити?</summary>
+                    <p>Будь-якою зручною. Linum відповідає тією мовою, якою ви пишете. Інтерфейс є українською, англійською і російською.</p>
+                </details>
+                <details>
+                    <summary>А якщо у мене слабкий комп'ютер?</summary>
+                    <p>Потрібна відеокарта NVIDIA від 6 ГБ. Якщо Linum думає повільно, виберіть рівень міркувань «Низький»: він працює на меншій і швидшій моделі.</p>
+                </details>
+                <details>
+                    <summary>Чим відрізняються моделі?</summary>
+                    <p>Fornax найшвидша, для простих картинок. Gaia збалансована, на кожен день. Cygnus малює фотореалістично, але повільніше.</p>
+                </details>
             </div>
-            <a class="link" href="https://github.com/Glib165/Linum">GitHub -> Glib165/Linum</a>
         </section>
 
-        <footer class="site-footer">Linum 1.9 · код за ліцензією MIT</footer>
+        <footer class="site-footer">
+            <a class="link back-top" href="#">Нагору, до завантаження</a>
+            <span>Linum 1.9 · код за ліцензією MIT · <a href="https://github.com/Glib165/Linum">GitHub</a></span>
+        </footer>
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
