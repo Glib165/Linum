@@ -46,3 +46,6 @@ node_modules/
 
 # Python and uv downloaded by install.bat / install.command
 tools/
+
+# Discord-бот: лише на комп'ютері розробника, на GitHub не публікуємо
+discord_bot/
