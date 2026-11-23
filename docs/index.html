@@ -12,7 +12,8 @@
     <!-- Хмара частинок у формі іконки Linum. Малює її particles.js -->
     <canvas id="bg"></canvas>
 
-    <div class="ui">
+    <!-- Перший екран. Коли сторінку гортають униз, він згасає, а частинки перетікають у структуру -->
+    <div class="ui screen">
         <header class="brand">
             <img class="mark" src="images/linum-icon.jpg" alt="">
             <div>
@@ -39,10 +40,10 @@
         <section class="list">
             <article class="card" data-tags="chat draw">
                 <div class="meta">
-                    <span>01 / Розмова<br>з Gaia</span>
+                    <span>01 / Розмова<br>з Linum</span>
                     <span>Чат<br>будь-якою мовою</span>
                 </div>
-                <p>Пишіть будь-якою мовою. Gaia відповідає на питання, малює і сама вирішує, що зробити.</p>
+                <p>Пишіть будь-якою мовою. Linum відповідає на питання, малює і сам вирішує, що зробити.</p>
             </article>
             <article class="card" data-tags="photo">
                 <div class="meta">
@@ -125,7 +126,70 @@
                 <a class="link" href="https://github.com/Glib165/Linum">GitHub -> Glib165/Linum</a>
             </div>
         </aside>
+
+        <a class="scroll-hint" href="#more">Гортайте вниз</a>
     </div>
+
+    <!-- Друга частина сторінки: з'являється над структурою з частинок -->
+    <main class="more" id="more">
+        <section class="part">
+            <h2>[як працює linum]</h2>
+            <div class="steps">
+                <article class="step">
+                    <span class="step-number">01</span>
+                    <h3>Ви пишете</h3>
+                    <p>Звичайними словами, будь-якою мовою: питання, прохання намалювати чи змінити фото.</p>
+                </article>
+                <article class="step">
+                    <span class="step-number">02</span>
+                    <h3>Linum думає</h3>
+                    <p>Мовна модель розуміє, чого ви хочете, і вирішує: відповісти, намалювати нове чи змінити фото.</p>
+                </article>
+                <article class="step">
+                    <span class="step-number">03</span>
+                    <h3>Художник малює</h3>
+                    <p>Fornax, Gaia чи Cygnus створює зображення на вашій відеокарті, за секунди.</p>
+                </article>
+                <article class="step">
+                    <span class="step-number">04</span>
+                    <h3>Критик перевіряє</h3>
+                    <p>Агент-критик дивиться на результат, виправляє помилки і записує уроки на майбутнє.</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="part columns">
+            <div class="panel">
+                <h2>[приватність]</h2>
+                <p>Усе працює на вашому комп'ютері. Чати, фото і те, що Linum про вас пам'ятає, нікуди не відправляються. Без акаунтів, без підписок, без хмари. Після встановлення інтернет не потрібен.</p>
+            </div>
+            <div class="panel">
+                <h2>[оновлення]</h2>
+                <p>Починаючи з версії 1.9, Linum сам перевіряє, чи вийшла нова версія, і пропонує оновитися одним натисканням. Моделі, чати й налаштування при цьому залишаються на місці.</p>
+            </div>
+            <div class="panel">
+                <h2>[вимоги]</h2>
+                <ul class="specs">
+                    <li><span>Windows</span><span>10/11, NVIDIA від 6 ГБ</span></li>
+                    <li><span>macOS</span><span>Apple M1 і новіше</span></li>
+                    <li><span>Пам'ять</span><span>32 ГБ рекомендовано</span></li>
+                    <li><span>Диск</span><span>близько 36 ГБ</span></li>
+                </ul>
+            </div>
+        </section>
+
+        <section class="part finale">
+            <h2>[почати]</h2>
+            <p class="finale-text">Безкоштовно, з відкритим кодом, на вашому комп'ютері.</p>
+            <div class="finale-buttons">
+                <a class="download" href="https://huggingface.co/Glib165/Linum/resolve/main/Linum-1.9-full.zip?download=true">Windows: повна версія, 36 ГБ -></a>
+                <a class="download" href="https://github.com/Glib165/Linum/releases/latest">macOS: завантажити, 1 МБ -></a>
+            </div>
+            <a class="link" href="https://github.com/Glib165/Linum">GitHub -> Glib165/Linum</a>
+        </section>
+
+        <footer class="site-footer">Linum 1.9 · код за ліцензією MIT</footer>
+    </main>
 
     <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
     <script src="linum-mask.js"></script>

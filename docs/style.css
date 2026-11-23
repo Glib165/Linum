@@ -16,10 +16,13 @@
 
 html,
 body {
-    height: 100%;
     margin: 0;
-    overflow: hidden;
+    overflow-x: hidden;
     background: #000;
+}
+
+html {
+    scroll-behavior: smooth;
 }
 
 body {
@@ -60,11 +63,161 @@ a {
 /* Шар з текстом. Сам він не ловить мишу, щоб курсор ворушив частинки;
    посилання, кнопки і список карток ловлять її знову. */
 .ui {
-    position: fixed;
-    inset: 0;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
     z-index: 1;
     pointer-events: none;
     text-transform: uppercase;
+}
+
+/* Підказка внизу першого екрана: там є ще одна частина */
+.scroll-hint {
+    position: absolute;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    font-size: 11px;
+    color: var(--muted);
+    text-decoration: none;
+    mix-blend-mode: plus-lighter;
+    animation: hint 2.4s ease-in-out infinite;
+}
+
+.scroll-hint::after {
+    content: "";
+    display: block;
+    width: 1px;
+    height: 28px;
+    margin: 8px auto 0;
+    background: var(--muted);
+}
+
+@keyframes hint {
+    0%, 100% { opacity: 0.4; transform: translate(-50%, 0); }
+    50% { opacity: 1; transform: translate(-50%, 6px); }
+}
+
+/* Друга частина сторінки: починається одразу під першим екраном */
+.more {
+    position: relative;
+    z-index: 1;
+    margin-top: 100vh;
+    padding: 18vh 24px 0;
+    max-width: 1120px;
+    margin-left: auto;
+    margin-right: auto;
+    text-transform: uppercase;
+}
+
+.part {
+    margin-bottom: 22vh;
+}
+
+.more h2 {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--accent);
+    margin-bottom: 24px;
+    mix-blend-mode: plus-lighter;
+}
+
+.more p {
+    text-transform: none;
+    color: var(--text);
+    line-height: 1.6;
+}
+
+/* Чотири кроки: як Linum відповідає */
+.steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+.step,
+.panel {
+    padding: 22px;
+    border: 1px solid var(--line);
+    background: rgba(0, 0, 0, 0.62);
+    backdrop-filter: blur(6px);
+}
+
+.step-number {
+    display: block;
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 18px;
+}
+
+.step h3 {
+    font-size: 14px;
+    font-weight: 400;
+    color: #fff;
+    margin: 0 0 10px;
+}
+
+.step p {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+/* Приватність, оновлення, вимоги */
+.columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.specs {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.specs li {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 6px 0;
+    border-top: 1px solid var(--line);
+}
+
+.specs li span:first-child {
+    color: #fff;
+}
+
+.specs li span:last-child {
+    color: var(--muted);
+    text-align: right;
+}
+
+/* Кінець сторінки: ще раз кнопки завантаження */
+.finale {
+    text-align: center;
+}
+
+.finale-text {
+    font-size: 15px;
+    margin-bottom: 28px;
+}
+
+.finale-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.site-footer {
+    padding: 24px 0 40px;
+    border-top: 1px solid var(--line);
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
 }
 
 .ui a,
@@ -325,11 +478,23 @@ a {
     .ui {
         position: relative;
         inset: auto;
+        height: auto;
         padding: 72vh 24px 24px;
     }
 
-    .tags {
+    .tags,
+    .scroll-hint {
         display: none;
+    }
+
+    /* На телефоні перший екран і так гортається, тож друга частина йде одразу за ним */
+    .more {
+        margin-top: 0;
+        padding-top: 30vh;
+    }
+
+    .part {
+        margin-bottom: 12vh;
     }
 
     .about {

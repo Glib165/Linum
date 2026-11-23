@@ -39,18 +39,19 @@
     renderer.setPixelRatio(DPR);
     renderer.setClearColor(0x000000, 1);
 
-    // ---------- Місця частинок з маски іконки ----------
+    // ---------- Місця частинок з масок ----------
+    // Кожна частинка має два місця: на Крику (перший екран) і на структурі (друга частина сторінки).
+    // Коли сторінку гортають, частинки перетікають з першого місця в друге.
 
-    function iconTargets() {
-        const mask = window.LINUM_MASK;
-        const size = mask.size;
+    function maskTargets(mask, ambientShare, depth) {
+        const width = mask.width, height = mask.height;
         const raw = atob(mask.bits);
         const white = [];
-        let minX = size, maxX = 0, minY = size, maxY = 0;
-        for (let i = 0; i < size * size; i++) {
+        let minX = width, maxX = 0, minY = height, maxY = 0;
+        for (let i = 0; i < width * height; i++) {
             if (raw.charCodeAt(i >> 3) & (1 << (i & 7))) {
                 white.push(i);
-                const x = i % size, y = Math.floor(i / size);
+                const x = i % width, y = Math.floor(i / width);
                 minX = Math.min(minX, x); maxX = Math.max(maxX, x);
                 minY = Math.min(minY, y); maxY = Math.max(maxY, y);
             }
@@ -62,7 +63,7 @@
         const targets = new Float32Array(COUNT * 4);
         for (let i = 0; i < COUNT; i++) {
             const k = i * 4;
-            if (Math.random() < 0.1) {
+            if (Math.random() < ambientShare) {
                 // Частинка-пилинка: літає навколо, ледь тягнеться до свого місця
                 const r = 1.25 * Math.cbrt(Math.random());
                 const theta = Math.random() * Math.PI * 2;
@@ -73,11 +74,11 @@
                 targets[k + 3] = 0;
             } else {
                 const index = white[Math.floor(Math.random() * white.length)];
-                const px = (index % size) + Math.random() * 1.6 - 0.3;
-                const py = Math.floor(index / size) + Math.random() * 1.6 - 0.3;
+                const px = (index % width) + Math.random() * 1.6 - 0.3;
+                const py = Math.floor(index / width) + Math.random() * 1.6 - 0.3;
                 targets[k] = (px - centerX) / half;
                 targets[k + 1] = -(py - centerY) / half;
-                targets[k + 2] = (Math.random() - 0.5) * 0.09;
+                targets[k + 2] = (Math.random() - 0.5) * depth;
                 targets[k + 3] = 1;
             }
         }
@@ -110,7 +111,10 @@
         return texture;
     }
 
-    const targetTexture = dataTexture(iconTargets());
+    const targetTexture = dataTexture(maskTargets(window.LINUM_MASK, 0.1, 0.09));
+    const structureTexture = dataTexture(window.LINUM_STRUCTURE
+        ? maskTargets(window.LINUM_STRUCTURE, 0.03, 0.3)
+        : maskTargets(window.LINUM_MASK, 0.1, 0.09));
     const randomTexture = dataTexture(randoms);
     const startTexture = dataTexture(randomStart());
 
@@ -378,6 +382,8 @@
     const simulateShader = shader(`
         uniform sampler2D uPos;
         uniform sampler2D uTarget;
+        uniform sampler2D uStructure;
+        uniform float uMorph;
         uniform sampler2D uRand;
         uniform sampler2D uVelocity;
         uniform sampler2D uDye;
@@ -410,15 +416,20 @@
 
         void main() {
             vec3 pos = texture2D(uPos, vUv).xyz;
-            vec4 target = texture2D(uTarget, vUv);
             vec4 rnd = texture2D(uRand, vUv);
+            // Перетікання: кожна частинка вирушає трохи в інший момент, тож форма переливається хвилею
+            float delay = 0.35 * rnd.w;
+            float morph = smoothstep(delay, delay + 0.65, uMorph);
+            vec4 target = mix(texture2D(uTarget, vUv), texture2D(uStructure, vUv), morph);
             float onIcon = target.w;
 
-            // Іконка ледь "дихає" вглиб
+            // Форма ледь "дихає" вглиб
             vec3 home = target.xyz;
             home.z += sin(uTime * 0.6 + home.y * 2.5 + home.x) * 0.04 * onIcon;
 
-            pos += curlNoise(pos * 1.2) * mix(0.0011, 0.00025, onIcon) * uHz;
+            // У польоті між формами частинки кружляють сильніше
+            float flight = sin(morph * 3.14159);
+            pos += curlNoise(pos * 1.2) * (mix(0.0011, 0.00025, onIcon) + flight * 0.004) * uHz;
             pos += (home - pos) * mix(0.004, mix(0.025, 0.06, rnd.x), onIcon) * uHz;
 
             // Поштовх рідини: де курсор пройшов, течія зносить частинки
@@ -434,6 +445,7 @@
         }
     `, {
         uPos: { value: null }, uTarget: { value: targetTexture }, uRand: { value: randomTexture },
+        uStructure: { value: structureTexture }, uMorph: { value: 0 },
         uVelocity: { value: null }, uDye: { value: null }, uTime: { value: 0 }, uHz: { value: 1 },
         uMVP: { value: new THREE.Matrix4() }, uFlowScale: { value: new THREE.Vector2() },
     });
@@ -522,6 +534,11 @@
         return { left: left, right: right, centerY: height / 2, share: 0.74 };
     }
 
+    // Два положення сцени: Крик на першому екрані (посередині вільного від тексту місця)
+    // і структура в другій частині (на весь екран). Під час прокручування сцена плавно переходить
+    // з першого положення в друге.
+    const layouts = { icon: null, structure: null };
+
     function resize() {
         width = window.innerWidth;
         height = window.innerHeight;
@@ -531,15 +548,45 @@
         visibleWidth = visibleHeight * camera.aspect;
 
         const area = freeArea();
-        const centerX = (area.left + area.right) / 2;
-        // Зсуваємо кадр так, щоб центр сцени припав на середину вільного місця
-        camera.setViewOffset(width, height, width / 2 - centerX, height / 2 - area.centerY, width, height);
-
         const byHeight = area.share * visibleHeight / 2;
         const byWidth = 0.9 * (area.right - area.left) / width * visibleWidth / 2;
-        group.scale.setScalar(Math.min(byHeight, byWidth));
+        layouts.icon = {
+            x: width / 2 - (area.left + area.right) / 2,
+            y: height / 2 - area.centerY,
+            scale: Math.min(byHeight, byWidth),
+        };
+        // Структура ширша за висоту (3:2): її маска займає по висоті лише дві третини
+        layouts.structure = {
+            x: 0,
+            y: 0,
+            scale: Math.min(0.95 * visibleWidth / 2, 1.35 * visibleHeight / 2),
+        };
+        applyLayout(morph);
     }
-    window.addEventListener("resize", resize);
+
+    function applyLayout(t) {
+        const a = layouts.icon, b = layouts.structure;
+        // Зсуваємо кадр так, щоб центр сцени припав куди треба
+        camera.setViewOffset(width, height, a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, width, height);
+        group.scale.setScalar(a.scale + (b.scale - a.scale) * t);
+    }
+
+    // ---------- Прокручування ----------
+    // morph: 0 на першому екрані, 1 коли дійшли до другої частини сторінки
+
+    let morph = 0;
+    let morphTarget = 0;
+    const firstScreen = document.querySelector(".screen");
+    const more = document.querySelector(".more");
+
+    function readScroll() {
+        const end = more ? Math.max(more.offsetTop * 0.8, 1) : 1;
+        morphTarget = Math.min(Math.max(window.scrollY / end, 0), 1);
+    }
+    window.addEventListener("scroll", readScroll, { passive: true });
+    window.addEventListener("resize", function () { resize(); readScroll(); });
+    readScroll();
+    morph = morphTarget;
     resize();
 
     // ---------- Курсор ----------
@@ -614,9 +661,15 @@
         const my = pointer.seen ? (pointer.y / height) * 2 - 1 : 0;
         gaze.set(CAMERA_BASE.x - mx * 0.6, CAMERA_BASE.y + my * 0.45, CAMERA_BASE.z);
         camera.position.lerp(gaze, 0.05);
+        // Плавно доганяємо прокручування, щоб перетікання не смикалося
+        morph += (morphTarget - morph) * Math.min(1, 0.08 * hz);
+        const layoutT = morph * morph * (3 - 2 * morph);
+        applyLayout(layoutT);
+        if (firstScreen) firstScreen.style.opacity = String(Math.max(0, 1 - morph * 1.6));
+
         camera.lookAt(lookTarget);
         camera.updateMatrixWorld();
-        group.rotation.y = Math.sin(time * 0.2) * 0.12;
+        group.rotation.y = Math.sin(time * 0.2) * 0.12 * (1 - morph);
         group.updateMatrixWorld();
 
         feedPointer(now);
@@ -629,6 +682,7 @@
         u.uDye.value = dye.read.texture;
         u.uTime.value = time;
         u.uHz.value = hz;
+        u.uMorph.value = morph;
         mvp.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).multiply(group.matrixWorld);
         u.uMVP.value.copy(mvp);
         // Швидкість рідини (клітинок за секунду) у зсув частинки за кадр
@@ -644,8 +698,19 @@
         if (!still) requestAnimationFrame(frame);
     }
 
-    // Для перевірки: index.html?warm=300 одразу прораховує 300 кадрів (5 секунд руху)
-    const warm = Number(new URLSearchParams(window.location.search).get("warm")) || 0;
+    // Для перевірки: index.html?warm=300 одразу прораховує 300 кадрів (5 секунд руху),
+    // а &morph=1 одразу гортає до другої частини (видно структуру)
+    const params = new URLSearchParams(window.location.search);
+    const warm = Number(params.get("warm")) || 0;
+    if (params.get("morph") === "1") {
+        // Лише для перевірки: частинки одразу в структурі, а перший екран ховаємо
+        window.removeEventListener("scroll", readScroll);
+        morph = morphTarget = 1;
+        if (params.get("text") === "1" && firstScreen && more) {
+            firstScreen.style.display = "none";
+            more.style.marginTop = "0";
+        }
+    }
     for (let i = 0; i < Math.min(warm, 2000); i++) frame(startTime + i * 1000 / 60, true);
     lastTime = performance.now();
     requestAnimationFrame(frame);
