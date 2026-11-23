@@ -25,6 +25,11 @@ MODELFILE = Path("models/llm/Gaia.Modelfile")
 # Скільки модель лишається в пам'яті після відповіді
 KEEP_ALIVE = "5m"
 
+# Скільки тексту модель тримає в голові за раз: правила, розмова, фото, роздуми і сама відповідь.
+# Ollama за замовчуванням дає лише 4096 токенів. Із фото й роздумами їх не вистачало,
+# відповідь обрізалася посередині, і Linum мовчав. 16384 вистачає з запасом.
+CONTEXT = 16384
+
 # Скільки останніх повідомлень чату показувати моделі
 HISTORY_LIMIT = 20
 
@@ -258,6 +263,9 @@ def chat(history):
 def chat_with_retry(attempts=3, **request):
     # Якщо модель не завантажилась (наприклад, бракувало відеопам'яті), Ollama звільняє
     # пам'ять і наступна спроба зазвичай вдається. Тому пробуємо кілька разів з паузою.
+    options = dict(request.get("options") or {})
+    options.setdefault("num_ctx", CONTEXT)
+    request["options"] = options
     for attempt in range(attempts):
         try:
             return ollama.chat(**request)
@@ -329,6 +337,17 @@ def decide(history, settings=None, model_name="", profile=""):
     return decision
 
 
+def _field(text, name):
+    # Значення текстового поля з обірваного JSON, наприклад "reply": "...". None, якщо поле не дописане.
+    match = re.search(rf'"{name}"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
+    if match is None:
+        return None
+    try:
+        return json.loads(f'"{match.group(1)}"')
+    except json.JSONDecodeError:
+        return match.group(1)
+
+
 def _decide_once(history, settings=None, model_name="", profile=""):
     """Повертає рішення: {"action", "reply", "prompt", "strength", "targets", "where", "remove", "colors"}.
 
@@ -365,10 +384,17 @@ def _decide_once(history, settings=None, model_name="", profile=""):
         keep_alive=KEEP_ALIVE,
         options={"temperature": 0.6},
     )
+    content = response["message"]["content"]
     try:
-        decision = json.loads(response["message"]["content"])
+        decision = json.loads(content)
     except json.JSONDecodeError:
-        return {"action": "chat", "reply": clean(response["message"]["content"]), "prompt": "", "strength": 0,
+        # Відповідь обірвалася або прийшла не у форматі JSON. Дістаємо з неї те, що встигло прийти:
+        # якщо є готова "reply", показуємо її, а не сирий текст JSON. Якщо немає, reply буде порожньою,
+        # і decide() спитає ще раз.
+        reply = _field(content, "reply")
+        if reply is None and not content.lstrip().startswith("{"):
+            reply = content  # модель відповіла звичайним текстом
+        return {"action": "chat", "reply": clean(reply or ""), "prompt": "", "strength": 0,
                 "targets": [], "where": "", "remove": False, "colors": [], "add": False, "place": "", "remember": ""}
 
     action = decision.get("action")
