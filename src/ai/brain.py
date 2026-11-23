@@ -321,6 +321,15 @@ def persona(name):
 
 
 def decide(history, settings=None, model_name="", profile=""):
+    # Іноді мовна модель повертає порожню відповідь у розмові. Тоді питаємо ще раз,
+    # щоб користувач не бачив порожнього місця замість відповіді.
+    decision = _decide_once(history, settings, model_name, profile)
+    if decision["action"] == "chat" and not decision["reply"]:
+        decision = _decide_once(history, settings, model_name, profile)
+    return decision
+
+
+def _decide_once(history, settings=None, model_name="", profile=""):
     """Повертає рішення: {"action", "reply", "prompt", "strength", "targets", "where", "remove", "colors"}.
 
     settings: рівень міркувань з REASONING (яка модель і чи думати перед відповіддю).

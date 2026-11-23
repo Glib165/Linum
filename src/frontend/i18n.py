@@ -184,6 +184,7 @@ TEXTS = {
     "reason_ollama": {"uk": "Ollama не запущена", "en": "Ollama is not running", "ru": "Ollama не запущена"},
     "gaia_failed": {"uk": "Linum не зміг відповісти: {reason}.", "en": "Linum could not reply: {reason}.", "ru": "Linum не смог ответить: {reason}."},
     "retry": {"uk": "Повторити", "en": "Retry", "ru": "Повторить"},
+    "empty_reply": {"uk": "Gaia не встигла відповісти", "en": "Gaia did not get to reply", "ru": "Gaia не успела ответить"},
     "update_available": {"uk": "Вийшла нова версія Linum {version}. Оновити зараз?\n\nМоделі, чати й налаштування залишаться на місці.", "en": "A new version, Linum {version}, is out. Update now?\n\nYour models, chats and settings stay as they are.", "ru": "Вышла новая версия Linum {version}. Обновить сейчас?\n\nМодели, чаты и настройки останутся на месте."},
     "update_download": {"uk": "Завантажую оновлення...", "en": "Downloading the update...", "ru": "Загружаю обновление..."},
     "update_install": {"uk": "Встановлюю оновлення...", "en": "Installing the update...", "ru": "Устанавливаю обновление..."},

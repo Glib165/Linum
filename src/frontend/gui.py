@@ -2293,6 +2293,8 @@ class LinumApp(ctk.CTk):
         # Помилку показуємо прямо в чаті, з кнопкою, щоб спитати ще раз
         self._remove_thinking()
         self._set_busy(False)
+        # Gaia могла стати недоступною (наприклад, Ollama впала): наступне повідомлення перевірить її знову
+        self.brain_ready = None
         self.set_status()
         message = str(error)
         if "out of memory" in message.lower() or "terminated" in message.lower():
@@ -2317,6 +2319,11 @@ class LinumApp(ctk.CTk):
 
     def _on_decided(self, chat_id, text, decision):
         self._remove_thinking()
+        if decision["action"] == "chat" and not decision["reply"]:
+            # Порожня відповідь після повторної спроби: показуємо її як помилку з кнопкою "Повторити",
+            # а не мовчимо
+            self._on_brain_failed(chat_id, text, RuntimeError(t("empty_reply")))
+            return
         if decision["reply"]:
             self.chats.add_message(chat_id, {"kind": "assistant", "text": decision["reply"], "created": self.now()})
             fade_in([self._add_assistant_text(decision["reply"])])()
