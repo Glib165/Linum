@@ -149,6 +149,33 @@ BOX_FORMAT = {
 
 HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 
+# Архітектор: макет сцени перед малюванням (див. src/ai/layout.py)
+LAYOUT_FORMAT = {
+    "type": "object",
+    "properties": {
+        "objects": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "box": {"type": "array", "items": {"type": "integer"}},
+                },
+                "required": ["name", "box"],
+            },
+        },
+    },
+    "required": ["objects"],
+}
+
+LAYOUT_RULES = (
+    "You are the Architect of Linum. Plan the composition of an image for the scene below. "
+    "List the 1-6 main visible objects with short English names (1-3 words). For each object give "
+    "box [ymin, xmin, ymax, xmax] normalized to 0-1000: where it should be in the frame. "
+    "Follow positions from the scene (left, right, above, behind). The background itself "
+    "(sky, room, field) is not an object. Answer with JSON only."
+)
+
 
 def identity():
     # Беремо особистість із Modelfile, щоб вона була записана лише в одному місці
@@ -467,6 +494,27 @@ def locate(image_path, name, where="", model=LLM_MODEL):
     if right - left < 10 or bottom - top < 10:
         return None
     return left * width / 1000, top * height / 1000, right * width / 1000, bottom * height / 1000
+
+
+def plan_layout(prompt, model=LLM_MODEL):
+    """Архітектор розставляє головні предмети сцени рамками.
+    Повертає список [{"name", "box"}] після перевірки layout.clean_layout, або [] якщо не вийшло:
+    тоді малюємо, як раніше, без макета."""
+    from src.ai.layout import clean_layout
+
+    try:
+        response = chat_with_retry(
+            model=model,
+            messages=[{"role": "user", "content": f"{LAYOUT_RULES}\n\nScene: {prompt}"}],
+            format=LAYOUT_FORMAT,
+            think=False,
+            keep_alive=KEEP_ALIVE,
+            options={"temperature": 0.2},
+        )
+        objects = json.loads(response["message"]["content"]).get("objects")
+    except Exception:
+        return []
+    return clean_layout(objects)
 
 
 REVIEW_FORMAT = {

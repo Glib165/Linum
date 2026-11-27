@@ -20,6 +20,7 @@ DEFAULTS = {
     "about": "",
     "quality_boost": True,
     "translate": True,
+    "architect": True,  # Архітектор складає макет сцени перед малюванням нової картинки
     "reasoning": DEFAULT_REASONING,
     "language": "uk",
 }

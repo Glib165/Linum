@@ -231,6 +231,10 @@ class LinumApp(ctk.CTk):
         self.card_cache = {}
         self.feed_body = None
         self.fonts = {}
+        # Шрифт повідомлень у чаті (Linum Serif), підключається лише для Linum
+        from src.frontend.fonts import load_chat_font
+
+        self.chat_family = load_chat_font()
         self.pending = None
         # None до першої перевірки Ollama. Якщо моделі немає, Linum малює за запитом.
         self.brain_ready = None
@@ -362,6 +366,10 @@ class LinumApp(ctk.CTk):
         if key not in self.fonts:
             self.fonts[key] = ctk.CTkFont(family=family or theme.FONT_FAMILY, size=size, weight=weight)
         return self.fonts[key]
+
+    def chat_font(self, size, weight="normal"):
+        # Шрифт тексту, який пишуть Linum і людина: повідомлення і поле вводу
+        return self.font(size, weight, family=self.chat_family)
 
     def icon_button(self, parent, icon, command, size=32):
         return ctk.CTkButton(
@@ -736,7 +744,7 @@ class LinumApp(ctk.CTk):
         self.prompt_entry = PromptBox(
             composer,
             placeholder=t("prompt_placeholder"),
-            font=self.font(15),
+            font=self.chat_font(16),
             width=CONTENT_MAX_WIDTH - 40,
             on_submit=self.on_generate,
         )
@@ -1517,7 +1525,7 @@ class LinumApp(ctk.CTk):
         bubble.pack(side="right", padx=(80, 8))
         has_translation = message.get("prompt_en") and message.get("language", "en") != "en"
         SelectableText(
-            bubble, message["prompt"], self.font(14), max_width=500, bg=theme.SURFACE,
+            bubble, message["prompt"], self.chat_font(15), max_width=500, bg=theme.SURFACE,
         ).pack(anchor="w", padx=16, pady=(9, 0 if has_translation else 9))
         if has_translation:
             SelectableText(
@@ -1590,7 +1598,7 @@ class LinumApp(ctk.CTk):
 
     def _add_assistant_text(self, text):
         row = self._assistant_row()
-        SelectableText(row, text, self.font(14), max_width=self.content_width - 60).pack(anchor="w", pady=(1, 0))
+        SelectableText(row, text, self.chat_font(15), max_width=self.content_width - 60).pack(anchor="w", pady=(1, 0))
         return row
 
     def _add_thinking(self):
@@ -2445,6 +2453,7 @@ class LinumApp(ctk.CTk):
             fixed_by = None
             second_image = None
             first_prompt = None
+            scene = []  # макет від Архітектора: [{"name", "box"}], порожній, якщо його немає
             try:
                 from src.ai.generator import edit_image, generate_image, load_model, save_image
                 from src.ai.translator import to_english
@@ -2461,6 +2470,11 @@ class LinumApp(ctk.CTk):
                         self.after(0, self._set_pending_title, t("looking_for_place").format(place=place or "..."))
                         box = brain.locate(source, f"area {place} where a new object can be placed", where,
                                            model=settings["model"])
+                    elif source is None and english and self.settings.get("architect"):
+                        # Нова картинка: Архітектор спершу розставляє предмети (макет сцени),
+                        # поки Gaia ще в пам'яті. Якщо не вийшло, scene порожній і малюємо як раніше.
+                        self.after(0, self._set_pending_title, t("architect_planning"))
+                        scene = brain.plan_layout(english, model=settings["model"])
                     # Мозок і художник разом не вміщаються в пам'ять, тому мозок на час малювання вивантажуємо
                     brain.unload()
                 elif self.brain_ready:
@@ -2475,8 +2489,12 @@ class LinumApp(ctk.CTk):
                         english, language = prompt, "en"
                 self.after(0, self._on_translated, english, language)
                 full_prompt = english
+                if scene:
+                    from src.ai.layout import layout_prompt
+
+                    full_prompt = layout_prompt(english, scene)
                 if style_text:
-                    full_prompt = f"{english}, {style_text}"
+                    full_prompt = f"{full_prompt}, {style_text}"
                 negative = NEGATIVE_PROMPT if quality_boost else None
                 mask = None
                 found = None

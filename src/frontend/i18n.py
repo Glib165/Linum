@@ -194,6 +194,8 @@ TEXTS = {
     "artist_loading": {"uk": "Художня модель ще завантажується. Повторіть прохання за хвилину.", "en": "The art model is still loading. Please repeat your request in a minute.", "ru": "Художественная модель ещё загружается. Повторите просьбу через минуту."},
     "creating_with_model": {"uk": "Створюю зображення моделлю {model}...", "en": "Creating an image with {model}...", "ru": "Создаю изображение моделью {model}..."},
     "searching_for": {"uk": "Шукаю: {target}", "en": "Looking for: {target}", "ru": "Ищу: {target}"},
+    "architect_planning": {"uk": "Архітектор розставляє предмети...", "en": "Architect is planning the scene...",
+                           "ru": "Архитектор расставляет предметы..."},
     "removing": {"uk": "Прибираю", "en": "Removing", "ru": "Убираю"},
     "editing_image": {"uk": "Змінюю зображення", "en": "Editing the image", "ru": "Изменяю изображение"},
     "creating_image": {"uk": "Створюю зображення", "en": "Creating the image", "ru": "Создаю изображение"},
