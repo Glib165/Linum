@@ -8,7 +8,7 @@ APP_NAME = "Linum"
 # Він увімкнений лише на комп'ютері, де є файл config/developer. Цього файлу немає в Git,
 # тож у звичайних користувачів режиму розробника немає, і в самій програмі його не ввімкнути.
 DEVELOPER = (Path(__file__).parent / "developer").exists()
-APP_VERSION = "1.9.1"
+APP_VERSION = "2.0"
 IMAGE_WIDTH = 512
 IMAGE_HEIGHT = 512
 OUTPUTS_DIR = "outputs/generated"
